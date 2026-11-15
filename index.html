@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Checklist Cá Nhân - Quản Lý Công Việc 24/7</title>
+  <meta name="description" content="Ứng dụng quản lý công việc và checklist cá nhân hàng ngày, tự động đồng bộ đám mây 24/7 qua GitHub Gist. Hỗ trợ PWA mượt mà trên điện thoại.">
+  
+  <!-- PWA & Mobile Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Checklist">
+  
+  <link rel="icon" type="image/png" sizes="64x64" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            darkBg: '#090d16',
+            darkCard: '#111827',
+            darkElevated: '#1f293d',
+            darkBorder: 'rgba(255, 255, 255, 0.08)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* iOS safe areas */
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 16px);
+    }
+
+    /* Animations */
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes check-pop {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .check-pop {
+      animation: check-pop 0.25s ease-out forwards;
+    }
+
+    /* Hide horizontal scrollbar for sleek date bar */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-darkBg text-slate-100 min-h-screen font-sans flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Header Section -->
+  <header class="sticky top-0 z-40 bg-darkBg/85 backdrop-blur-md border-b border-white/5 pt-safe px-4 py-3">
+    <div class="max-w-3xl mx-auto flex items-center justify-between gap-3">
+      <!-- Logo & App Name -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-cyan-500 p-0.5 shadow-lg shadow-emerald-500/20 flex items-center justify-center">
+          <div class="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center">
+            <i data-lucide="check-check" class="w-5 h-5 text-emerald-400"></i>
+          </div>
+        </div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
+            Checklist Cá Nhân
+            <span class="text-[10px] uppercase tracking-wider font-semibold bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">24/7 Cloud</span>
+          </h1>
+          <p class="text-xs text-slate-400 hidden sm:block">Lên kế hoạch kỷ luật • Đồng bộ tức thì</p>
+        </div>
+      </div>
+
+      <!-- Cloud Sync & Settings Actions -->
+      <div class="flex items-center gap-2">
+        <!-- Sync Status Pill -->
+        <button id="btnSyncStatus" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 text-xs transition duration-150 active:scale-95" title="Bấm để kiểm tra hoặc đồng bộ ngay">
+          <span id="syncIndicatorDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="syncStatusText" class="text-slate-300 font-medium">Đã đồng bộ</span>
+          <i data-lucide="refresh-cw" id="syncIconSpin" class="w-3.5 h-3.5 text-slate-400 ml-0.5"></i>
+        </button>
+
+        <!-- Settings Button -->
+        <button id="btnOpenSettings" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 text-slate-300 transition duration-150 active:scale-95" title="Cài đặt đồng bộ & Đám mây">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs (Checklist vs Nhật ký Lịch sử) -->
+  <div class="max-w-3xl mx-auto w-full px-4 pt-3 pb-1">
+    <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/5 shadow-inner">
+      <button id="tabBtnChecklist" class="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30">
+        <i data-lucide="list-todo" class="w-4 h-4"></i>
+        <span>Công Việc & Lịch Trình</span>
+      </button>
+      <button id="tabBtnHistory" class="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+        <i data-lucide="history" class="w-4 h-4"></i>
+        <span>📜 Nhật Ký & Kỷ Luật</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Container -->
+  <main class="max-w-3xl mx-auto w-full px-4 py-3 flex-1 flex flex-col gap-4">
+
+    <!-- TAB 1: CHECKLIST VIEW -->
+    <div id="viewChecklist" class="flex flex-col gap-4">
+
+      <!-- Today Banner & Date Focus Header -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-4 border border-white/10 shadow-xl relative overflow-hidden">
+        <div class="absolute -right-8 -top-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="badgeDayRelation" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Hôm nay</span>
+              <span id="labelFullDate" class="text-sm font-semibold text-slate-300">Thứ Bảy, ngày 15/11/2026</span>
+            </div>
+            <h2 id="headingSelectedDay" class="text-xl sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
+              Danh sách công việc
+            </h2>
+          </div>
+
+          <!-- Quick Stats Pill -->
+          <div class="flex items-center gap-3 bg-slate-950/60 px-3.5 py-2 rounded-xl border border-white/5 self-start sm:self-auto">
+            <div class="text-center">
+              <div id="statCompletedRatio" class="text-lg font-bold text-emerald-400 leading-none">0/0</div>
+              <div class="text-[10px] text-slate-400 font-medium uppercase mt-0.5">Hoàn thành</div>
+            </div>
+            <div class="h-7 w-[1px] bg-white/10"></div>
+            <div class="text-center">
+              <div id="statPercent" class="text-lg font-bold text-cyan-400 leading-none">0%</div>
+              <div class="text-[10px] text-slate-400 font-medium uppercase mt-0.5">Tiến độ</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-950/80 rounded-full h-2 mt-3.5 overflow-hidden border border-white/5">
+          <div id="dayProgressBar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Date Selector Bar: [◀ Hôm qua] [Hôm nay] [Ngày mai] [+2 ngày] [+3 ngày] [📅 Lịch] -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
+          <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> Chọn ngày xem việc:</span>
+          <button id="btnJumpToToday" class="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 active:scale-95 transition">
+            Về Hôm nay
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <!-- Button: Hôm qua -->
+          <button id="btnDatePrev" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
+            <span class="text-[10px] text-slate-400 font-medium">Hôm qua</span>
+            <span id="dateTextPrev" class="text-xs font-bold text-slate-200 mt-0.5">14/11</span>
+          </button>
+
+          <!-- Button: Hôm nay -->
+          <button id="btnDateToday" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3.5 rounded-xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-300 font-bold shadow-md shadow-emerald-950/40 min-w-[82px] active:scale-95 transition">
+            <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">Hôm nay</span>
+            <span id="dateTextToday" class="text-xs font-extrabold text-white mt-0.5">15/11</span>
+          </button>
+
+          <!-- Button: Ngày mai -->
+          <button id="btnDateTomorrow" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
+            <span class="text-[10px] text-slate-400 font-medium">Ngày mai</span>
+            <span id="dateTextTomorrow" class="text-xs font-bold text-slate-200 mt-0.5">16/11</span>
+          </button>
+
+          <!-- Button: +2 ngày -->
+          <button id="btnDatePlus2" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
+            <span id="dateDayNamePlus2" class="text-[10px] text-slate-400 font-medium">+2 ngày</span>
+            <span id="dateTextPlus2" class="text-xs font-bold text-slate-200 mt-0.5">17/11</span>
+          </button>
+
+          <!-- Button: +3 ngày -->
+          <button id="btnDatePlus3" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
+            <span id="dateDayNamePlus3" class="text-[10px] text-slate-400 font-medium">+3 ngày</span>
+            <span id="dateTextPlus3" class="text-xs font-bold text-slate-200 mt-0.5">18/11</span>
+          </button>
+
+          <!-- Button: Date Picker (Lịch) -->
+          <label class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[76px] relative" title="Chọn ngày bất kỳ trên lịch">
+            <span class="text-[10px] text-cyan-400 font-semibold flex items-center gap-1">
+              <i data-lucide="calendar-days" class="w-3 h-3"></i> Lịch
+            </span>
+            <span id="dateTextCustom" class="text-xs font-bold text-slate-200 mt-0.5">Chọn ngày</span>
+            <input type="date" id="inputCustomDatePicker" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer">
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Add Task Card for Selected Date -->
+      <div class="bg-slate-900/90 rounded-2xl p-3 sm:p-4 border border-white/10 shadow-lg">
+        <form id="formAddTask" class="flex flex-col gap-2.5">
+          <!-- Main Input Line -->
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1">
+              <input type="text" id="inputTaskTitle" placeholder="+ Thêm công việc mới cho ngày này... (Nhấn Enter để lưu)" class="w-full bg-slate-950/80 text-sm text-white placeholder-slate-500 rounded-xl px-4 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-inner">
+            </div>
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition active:scale-95 flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 flex-shrink-0">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Thêm</span>
+            </button>
+          </div>
+
+          <!-- Secondary Options Row: Time + Note toggles -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/5 text-xs">
+            <div class="flex items-center gap-2">
+              <!-- Time input badge -->
+              <div class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-white/5 text-slate-300">
+                <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i>
+                <input type="time" id="inputTaskTime" class="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer">
+              </div>
+
+              <!-- Note input toggle -->
+              <button type="button" id="btnToggleNoteField" class="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-white/5 text-slate-400 hover:text-slate-200 transition">
+                <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i>
+                <span id="labelToggleNote">Thêm ghi chú</span>
+              </button>
+            </div>
+
+            <div class="text-[11px] text-slate-500 hidden sm:block">
+              Phím tắt: Enter để thêm nhanh
+            </div>
+          </div>
+
+          <!-- Expandable Note Field -->
+          <div id="containerNoteField" class="hidden pt-1">
+            <textarea id="inputTaskNote" rows="2" placeholder="Ghi chú chi tiết, link hoặc tiêu chí hoàn thành..." class="w-full bg-slate-950/80 text-xs text-white placeholder-slate-500 rounded-xl p-2.5 border border-white/10 focus:outline-none focus:border-blue-500 transition"></textarea>
+          </div>
+        </form>
+      </div>
+
+      <!-- GROUP 1: CẦN LÀM (TO-DO TASKS) -->
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between px-1">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            <h3 class="text-xs font-bold tracking-wide uppercase text-slate-300">Cần làm</h3>
+            <span id="badgePendingCount" class="text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          
+          <!-- Bulk actions if any -->
+          <div class="text-xs text-slate-400">
+            <button id="btnMoveAllToTomorrow" class="hover:text-emerald-400 transition text-[11px] flex items-center gap-1" title="Chuyển tất cả việc chưa xong sang ngày mai">
+              <i data-lucide="chevrons-right" class="w-3.5 h-3.5"></i> Dời tất cả sang mai
+            </button>
+          </div>
+        </div>
+
+        <!-- Pending Tasks List Container -->
+        <div id="listPendingTasks" class="flex flex-col gap-2 min-h-[60px]">
+          <!-- Dynamic Task Cards will be rendered here -->
+        </div>
+
+        <!-- Empty State for Pending Tasks -->
+        <div id="emptyPendingState" class="hidden py-8 px-4 rounded-2xl border border-dashed border-white/10 text-center bg-slate-900/30">
+          <div class="w-12 h-12 rounded-full bg-slate-800/80 flex items-center justify-center mx-auto mb-2 text-slate-400">
+            <i data-lucide="sparkles" class="w-6 h-6 text-emerald-400"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-200">Không có việc cần làm</p>
+          <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Thêm công việc mới ở trên hoặc tận hưởng ngày thảnh thơi của bạn!</p>
+        </div>
+      </div>
+
+      <!-- GROUP 2: ĐÃ HOÀN THÀNH (COMPLETED TASKS) -->
+      <div class="flex flex-col gap-2 pt-2">
+        <div class="flex items-center justify-between px-1">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+            <h3 class="text-xs font-bold tracking-wide uppercase text-slate-300">Đã hoàn thành</h3>
+            <span id="badgeCompletedCount" class="text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          
+          <button id="btnToggleCompletedList" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+            <span id="labelToggleCompleted">Ẩn / Hiện</span>
+            <i data-lucide="chevron-down" id="iconToggleCompleted" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Completed Tasks List Container -->
+        <div id="listCompletedTasks" class="flex flex-col gap-2">
+          <!-- Dynamic Completed Cards will be rendered here -->
+        </div>
+
+        <div id="emptyCompletedState" class="hidden py-4 text-center text-xs text-slate-500">
+          Chưa có công việc nào được hoàn thành trong ngày này.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: NHẬT KÝ LỊCH SỬ & KỶ LUẬT (HISTORY & STREAK VIEW) -->
+    <div id="viewHistory" class="hidden flex flex-col gap-4">
+      
+      <!-- Discipline Streak Header Card -->
+      <div class="bg-gradient-to-r from-amber-500/10 via-slate-900 to-emerald-500/10 rounded-2xl p-5 border border-white/10 shadow-xl relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="flame" class="w-8 h-8 text-amber-400"></i>
+            </div>
+            <div>
+              <div class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Chuỗi Kỷ Luật Liên Tục</div>
+              <div class="text-3xl font-extrabold text-white mt-0.5 flex items-baseline gap-2">
+                <span id="streakCount">0</span>
+                <span class="text-sm font-medium text-slate-400">ngày</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">Mỗi ngày hoàn thành công việc là 1 ngày xây dựng thói quen vững chắc.</p>
+            </div>
+          </div>
+
+          <!-- Total Lifetime Stats -->
+          <div class="grid grid-cols-2 gap-2 sm:gap-3 bg-slate-950/70 p-3 rounded-xl border border-white/5">
+            <div class="text-center px-2">
+              <div id="totalLifetimeTasks" class="text-base font-bold text-white">0</div>
+              <div class="text-[10px] text-slate-400">Tổng việc đã tạo</div>
+            </div>
+            <div class="text-center px-2">
+              <div id="totalLifetimeCompleted" class="text-base font-bold text-emerald-400">0</div>
+              <div class="text-[10px] text-slate-400">Đã hoàn thành</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Days Feed -->
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+            <i data-lucide="calendar-check" class="w-4 h-4 text-emerald-400"></i>
+            Lịch sử theo ngày
+          </h3>
+          <span class="text-xs text-slate-400">Tự động lưu trữ vĩnh viễn</span>
+        </div>
+
+        <div id="containerHistoryDays" class="flex flex-col gap-3">
+          <!-- Dynamic history days cards will be rendered here -->
+        </div>
+
+        <div id="emptyHistoryState" class="hidden py-12 px-4 rounded-2xl border border-dashed border-white/10 text-center bg-slate-900/30">
+          <i data-lucide="inbox" class="w-8 h-8 text-slate-500 mx-auto mb-2"></i>
+          <p class="text-sm font-semibold text-slate-300">Chưa có dữ liệu lịch sử</p>
+          <p class="text-xs text-slate-400 mt-1">Khi bạn tạo và hoàn thành công việc theo từng ngày, nhật ký sẽ tự động xuất hiện tại đây.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: EDIT TASK DIALOG -->
+  <div id="modalEditTask" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-white/10 rounded-2xl max-w-md w-full p-5 shadow-2xl flex flex-col gap-4 animate-scale-up">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i>
+          Chỉnh sửa công việc
+        </h3>
+        <button id="btnCloseEditModal" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="formEditTask" class="flex flex-col gap-3">
+        <input type="hidden" id="editTaskId">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Tên công việc</label>
+          <input type="text" id="editTaskTitle" required class="w-full bg-slate-950 text-sm text-white rounded-xl px-3.5 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Ngày thực hiện</label>
+            <input type="date" id="editTaskDate" required class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Giờ hẹn (nếu có)</label>
+            <input type="time" id="editTaskTime" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Ghi chú chi tiết</label>
+          <textarea id="editTaskNote" rows="3" class="w-full bg-slate-950 text-xs text-white rounded-xl p-3 border border-white/10 focus:outline-none focus:border-emerald-500"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+          <button type="button" id="btnCancelEditModal" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition">
+            Hủy
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition shadow-lg shadow-emerald-900/50">
+            Lưu thay đổi
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SETTINGS & CLOUD SYNC -->
+  <div id="modalSettings" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <i data-lucide="cloud" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Cài Đặt Đồng Bộ Đám Mây 24/7</h3>
+            <p class="text-xs text-slate-400">GitHub Gist Cloud Sync Engine</p>
+          </div>
+        </div>
+        <button id="btnCloseSettingsModal" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Sync Status Overview Box -->
+      <div class="bg-slate-950 p-3.5 rounded-xl border border-white/5 flex flex-col gap-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Trạng thái hiện tại:</span>
+          <span id="settingsModalSyncStatus" class="font-bold text-emerald-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Đã kết nối
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Thời gian đồng bộ gần nhất:</span>
+          <span id="settingsModalLastSync" class="text-slate-200 font-mono text-[11px]">Chưa đồng bộ</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Chế độ Offline 0ms:</span>
+          <span class="text-cyan-400 font-medium">Bật (LocalStorage)</span>
+        </div>
+      </div>
+
+      <!-- Config Form -->
+      <form id="formCloudConfig" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+            <span>GitHub Gist ID</span>
+            <span class="text-[10px] text-slate-500 font-normal">Nơi lưu trữ JSON vĩnh viễn</span>
+          </label>
+          <input type="text" id="configGistId" required placeholder="Ví dụ: a94667ab688b60688f27c695ae1871ed" class="w-full bg-slate-950 text-xs font-mono text-white rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+            <span>GitHub Personal Access Token</span>
+            <span class="text-[10px] text-slate-500 font-normal">Quyền gist</span>
+          </label>
+          <div class="relative">
+            <input type="password" id="configGithubToken" required placeholder="gho_..." class="w-full bg-slate-950 text-xs font-mono text-white rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500 pr-10">
+            <button type="button" id="btnToggleTokenVisibility" class="absolute right-2.5 top-2.5 text-slate-400 hover:text-white">
+              <i data-lucide="eye" id="iconTokenEye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 1-Click Fast Link Generator -->
+        <div class="bg-slate-950/60 p-3 rounded-xl border border-white/5 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <i data-lucide="link" class="w-3.5 h-3.5 text-emerald-400"></i>
+              Link đăng nhập tự động 1-click cho Điện thoại:
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">Gửi link này qua Zalo/Telegram cho điện thoại. Khi mở trên Safari/Chrome, điện thoại sẽ tự động kết nối đám mây không cần nhập token.</p>
+          <div class="flex items-center gap-2">
+            <input type="text" id="inputOneClickUrl" readonly class="flex-1 bg-slate-900 text-[11px] font-mono text-emerald-300 rounded-lg px-2.5 py-1.5 border border-white/5 select-all">
+            <button type="button" id="btnCopyOneClickUrl" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white rounded-lg transition active:scale-95 flex items-center gap-1">
+              <i data-lucide="copy" class="w-3 h-3"></i> Chép
+            </button>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnForcePullCloud" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 rounded-xl transition flex items-center gap-1.5">
+              <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-cyan-400"></i>
+              Tải từ Đám mây
+            </button>
+            <button type="button" id="btnForcePushCloud" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 rounded-xl transition flex items-center gap-1.5">
+              <i data-lucide="upload-cloud" class="w-3.5 h-3.5 text-emerald-400"></i>
+              Đẩy lên Đám mây
+            </button>
+          </div>
+
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-emerald-950/50">
+            Lưu cấu hình
+          </button>
+        </div>
+      </form>
+
+      <!-- Backup / Export / Import Area -->
+      <div class="pt-3 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
+        <span>Sao lưu thủ công:</span>
+        <div class="flex items-center gap-2">
+          <button id="btnExportJson" class="text-slate-300 hover:text-white underline">Xuất file JSON</button>
+          <span>•</span>
+          <label class="text-slate-300 hover:text-white underline cursor-pointer">
+            Nhập file JSON
+            <input type="file" id="inputImportJson" accept=".json" class="hidden">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Footer -->
+  <footer class="mt-auto py-4 border-t border-white/5 text-center text-xs text-slate-500 px-4 pb-safe">
+    <div class="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
+        <span>Checklist Cá Nhân • Bảo mật & Riêng tư</span>
+      </div>
+      <div>Đồng bộ đám mây 24/7 qua GitHub Gist</div>
+    </div>
+  </footer>
+
+  <!-- Main JavaScript App -->
+  <script src="app.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('PWA ServiceWorker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.error('PWA ServiceWorker registration failed:', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
