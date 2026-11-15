@@ -199,12 +199,38 @@ function initConfigFromUrlOrStorage() {
   update1ClickUrlField();
 }
 
+const DUMMY_TITLES = new Set([
+  'Xác định 3 mục tiêu quan trọng nhất hôm nay',
+  'Đọc sách hoặc trau dồi kiến thức mới (30 phút)',
+  'Uống đủ 2 lít nước & vận động thể chất',
+  'Kiểm thử Tự động Hóa Công việc Hàng ngày (QA Bot)',
+  'Unit Test Task 1',
+  'Offline Sync Unit Task'
+]);
+
+function isUserTask(t) {
+  if (!t || !t.title || typeof t.title !== 'string') return false;
+  return !DUMMY_TITLES.has(t.title.trim());
+}
+
 function loadLocalData() {
   const localRaw = localStorage.getItem(STORAGE_KEY_DATA);
   if (localRaw) {
     try {
       appData = JSON.parse(localRaw);
-      if (!Array.isArray(appData.tasks)) appData.tasks = [];
+      if (!Array.isArray(appData.tasks)) {
+        appData.tasks = [];
+      } else {
+        appData.tasks = appData.tasks
+          .filter(isUserTask)
+          .map(t => ({
+            ...t,
+            date: t.date || t.dateKey || getTodayDateStr(),
+            dateKey: t.dateKey || t.date || getTodayDateStr(),
+            time: t.time || t.dueTime || '',
+            dueTime: t.dueTime || t.time || ''
+          }));
+      }
     } catch (e) {
       console.error('Error loading local data, resetting:', e);
       resetToDefaultData();
@@ -215,42 +241,34 @@ function loadLocalData() {
 }
 
 function resetToDefaultData() {
-  const today = getTodayDateStr();
+  const recoveredTasks = [];
+  const legacyKeys = ['fb_auto_tasks_cache', 'fb_auto_tasks_outbox', 'my_checklist_backup', 'tasks_cache', 'tasks', 'user_tasks'];
+  for (const lk of legacyKeys) {
+    try {
+      const raw = localStorage.getItem(lk);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.tasks) ? parsed.tasks : []);
+        for (const item of list) {
+          if (isUserTask(item)) {
+            recoveredTasks.push({
+              ...item,
+              date: item.date || item.dateKey || getTodayDateStr(),
+              dateKey: item.dateKey || item.date || getTodayDateStr(),
+              time: item.time || item.dueTime || '',
+              dueTime: item.dueTime || item.time || ''
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   appData = {
     version: 1,
     updatedAt: Date.now(),
-    tasks: [
-      {
-        id: 'task_' + Date.now() + '_1',
-        title: 'Xác định 3 mục tiêu quan trọng nhất hôm nay',
-        date: today,
-        time: '08:00',
-        note: 'Tập trung hoàn thành trước 12h trưa',
-        completed: false,
-        completedAt: null,
-        createdAt: Date.now()
-      },
-      {
-        id: 'task_' + Date.now() + '_2',
-        title: 'Đọc sách hoặc trau dồi kiến thức mới (30 phút)',
-        date: today,
-        time: '20:30',
-        note: 'Ghi chú lại những bài học đắt giá',
-        completed: false,
-        completedAt: null,
-        createdAt: Date.now() + 1
-      },
-      {
-        id: 'task_' + Date.now() + '_3',
-        title: 'Uống đủ 2 lít nước & vận động thể chất',
-        date: today,
-        time: '',
-        note: 'Giữ năng lượng bền bỉ suốt cả ngày',
-        completed: false,
-        completedAt: null,
-        createdAt: Date.now() + 2
-      }
-    ]
+    tasks: recoveredTasks,
+    history: []
   };
   saveLocalData();
 }
@@ -337,20 +355,43 @@ async function fetchCloudData(isManual = false) {
     if (cloudContent) {
       try {
         const remoteData = JSON.parse(cloudContent);
-        // Smart merge or timestamp check
-        if (remoteData.updatedAt && (!appData.updatedAt || remoteData.updatedAt > appData.updatedAt)) {
-          appData = remoteData;
-          saveLocalData();
-          renderApp();
-          setSyncStatusUI('synced', 'Đã tải mới từ Đám mây');
-          if (isManual) showToast('Đã tải và cập nhật dữ liệu mới nhất!', 'success');
-        } else if (appData.updatedAt && remoteData.updatedAt && appData.updatedAt > remoteData.updatedAt) {
-          // Local is newer, push to cloud
-          pushCloudData(false);
-        } else {
-          setSyncStatusUI('synced', 'Dữ liệu đã mới nhất');
-          if (isManual) showToast('Dữ liệu đã đồng bộ hoàn hảo!', 'success');
+        const rawRemote = Array.isArray(remoteData.tasks) ? remoteData.tasks : [];
+        const remoteTasks = rawRemote
+          .filter(isUserTask)
+          .map(t => ({
+            ...t,
+            date: t.date || t.dateKey || getTodayDateStr(),
+            dateKey: t.dateKey || t.date || getTodayDateStr(),
+            time: t.time || t.dueTime || '',
+            dueTime: t.dueTime || t.time || ''
+          }));
+
+        // Non-destructive 2-way union merge
+        const taskMap = new Map();
+        for (const lt of (appData.tasks || [])) {
+          if (isUserTask(lt)) taskMap.set(lt.id, lt);
         }
+        for (const rt of remoteTasks) {
+          if (!taskMap.has(rt.id)) {
+            taskMap.set(rt.id, rt);
+          } else {
+            const lt = taskMap.get(rt.id);
+            if ((rt.updatedAt || 0) > (lt.updatedAt || 0)) {
+              taskMap.set(rt.id, rt);
+            }
+          }
+        }
+        const mergedList = Array.from(taskMap.values());
+        appData.tasks = mergedList;
+        appData.updatedAt = Date.now();
+        saveLocalData();
+        renderApp();
+
+        if (mergedList.length > remoteTasks.length) {
+          pushCloudData(false);
+        }
+        setSyncStatusUI('synced', 'Đã đồng bộ');
+        if (isManual) showToast('Đã tải và cập nhật dữ liệu mới nhất!', 'success');
       } catch (parseErr) {
         console.warn('Could not parse cloud JSON, uploading local data...');
         pushCloudData(false);
@@ -440,7 +481,9 @@ function addTask(title, dateStr, timeStr = '', noteStr = '') {
     id: 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
     title: title.trim(),
     date: dateStr || selectedDate,
+    dateKey: dateStr || selectedDate,
     time: timeStr || '',
+    dueTime: timeStr || '',
     note: noteStr || '',
     completed: false,
     completedAt: null,
