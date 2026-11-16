@@ -273,6 +273,106 @@ function resetToDefaultData() {
   saveLocalData();
 }
 
+// ==========================================
+// 4.1 SHEETS DATA MANAGEMENT & STORAGE
+// ==========================================
+const STORAGE_KEY_SHEETS = 'my_sheets_data_v1';
+let currentActiveTab = 'checklist';
+let sheetsData = {
+  activeSheetId: 'sheet_fb',
+  sheets: []
+};
+let sheetDebounceTimer = null;
+let sheetSearchQuery = '';
+const visiblePasswords = new Set();
+
+async function loadLocalSheetsData() {
+  const localRaw = localStorage.getItem(STORAGE_KEY_SHEETS);
+  if (localRaw) {
+    try {
+      const parsed = JSON.parse(localRaw);
+      if (parsed && Array.isArray(parsed.sheets) && parsed.sheets.length > 0) {
+        sheetsData = parsed;
+        return;
+      }
+    } catch (e) {
+      console.warn('Error reading local sheets data:', e);
+    }
+  }
+
+  // Fallback: fetch bundled sheets_data.json
+  try {
+    const res = await fetch('./sheets_data.json');
+    if (res.ok) {
+      const initSheets = await res.json();
+      if (initSheets && Array.isArray(initSheets.sheets)) {
+        sheetsData = initSheets;
+        saveLocalSheetsData();
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load fallback sheets_data.json:', err);
+  }
+}
+
+function saveLocalSheetsData() {
+  sheetsData.updatedAt = Date.now();
+  localStorage.setItem(STORAGE_KEY_SHEETS, JSON.stringify(sheetsData));
+}
+
+function triggerCloudSheetsSync() {
+  saveLocalSheetsData();
+  if (!cloudConfig.autoSync) return;
+  if (sheetDebounceTimer) clearTimeout(sheetDebounceTimer);
+  setSyncStatusUI('syncing', 'Đang lưu Sheet lên Cloud...');
+  sheetDebounceTimer = setTimeout(() => {
+    pushCloudSheetsData(false);
+  }, 1200);
+}
+
+async function pushCloudSheetsData(isManual = false) {
+  if (!navigator.onLine) {
+    setSyncStatusUI('offline', 'Offline: Đã lưu Sheet trên điện thoại');
+    return;
+  }
+  if (!cloudConfig.gistId || !cloudConfig.token) return;
+
+  const btnSpin = document.getElementById('iconSaveSheetSpin');
+  if (btnSpin) btnSpin.classList.add('animate-spin');
+
+  try {
+    setSyncStatusUI('syncing');
+    const payload = {
+      description: 'Personal Daily Checklist & Sheet Manager 24/7 Cloud Sync Data',
+      files: {
+        'sheets_data.json': {
+          content: JSON.stringify(sheetsData, null, 2)
+        }
+      }
+    };
+    const res = await fetch(`https://api.github.com/gists/${cloudConfig.gistId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${cloudConfig.token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(`Cloud update error ${res.status}`);
+    }
+    setSyncStatusUI('synced', 'Đã lưu Sheet lên Đám mây');
+    if (isManual) showToast('Đã lưu dữ liệu Sheet lên Cloud 24/7!', 'success');
+  } catch (e) {
+    console.error('Error saving sheets to cloud:', e);
+    setSyncStatusUI('error', 'Lỗi lưu Sheet: ' + e.message);
+    if (isManual) showToast('Lỗi lưu Sheet: ' + e.message, 'error');
+  } finally {
+    if (btnSpin) btnSpin.classList.remove('animate-spin');
+  }
+}
+
 function saveLocalData() {
   appData.updatedAt = Date.now();
   localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(appData));
@@ -352,6 +452,22 @@ async function fetchCloudData(isManual = false) {
       }
     }
 
+    // Sync Sheets Data if present in Gist
+    if (gistData.files && gistData.files['sheets_data.json'] && gistData.files['sheets_data.json'].content) {
+      try {
+        const remoteSheets = JSON.parse(gistData.files['sheets_data.json'].content);
+        if (remoteSheets && Array.isArray(remoteSheets.sheets)) {
+          sheetsData = remoteSheets;
+          saveLocalSheetsData();
+          if (currentActiveTab === 'sheets') {
+            renderSheetsView();
+          }
+        }
+      } catch (sheetsErr) {
+        console.warn('Could not parse sheets_data.json:', sheetsErr);
+      }
+    }
+
     if (cloudContent) {
       try {
         const remoteData = JSON.parse(cloudContent);
@@ -424,10 +540,13 @@ async function pushCloudData(isManual = false) {
     isSyncing = true;
 
     const payload = {
-      description: 'Personal Daily Checklist & Task Manager 24/7 Cloud Sync Data',
+      description: 'Personal Daily Checklist & Sheet Manager 24/7 Cloud Sync Data',
       files: {
         'checklist_data.json': {
           content: JSON.stringify(appData, null, 2)
+        },
+        'sheets_data.json': {
+          content: JSON.stringify(sheetsData, null, 2)
         }
       }
     };
@@ -1017,24 +1136,309 @@ function update1ClickUrlField() {
 }
 
 function switchTab(tabName) {
+  currentActiveTab = tabName;
   const viewChecklist = document.getElementById('viewChecklist');
+  const viewSheets = document.getElementById('viewSheets');
   const viewHistory = document.getElementById('viewHistory');
   const tabBtnChecklist = document.getElementById('tabBtnChecklist');
+  const tabBtnSheets = document.getElementById('tabBtnSheets');
   const tabBtnHistory = document.getElementById('tabBtnHistory');
 
+  const activeClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
+  const inactiveClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
+
+  if (viewChecklist) viewChecklist.classList.add('hidden');
+  if (viewSheets) viewSheets.classList.add('hidden');
+  if (viewHistory) viewHistory.classList.add('hidden');
+
+  if (tabBtnChecklist) tabBtnChecklist.className = inactiveClass;
+  if (tabBtnSheets) tabBtnSheets.className = inactiveClass;
+  if (tabBtnHistory) tabBtnHistory.className = inactiveClass;
+
   if (tabName === 'checklist') {
-    viewChecklist.classList.remove('hidden');
-    viewHistory.classList.add('hidden');
-    tabBtnChecklist.className = 'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
-    tabBtnHistory.className = 'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
-  } else {
-    viewChecklist.classList.add('hidden');
-    viewHistory.classList.remove('hidden');
-    tabBtnHistory.className = 'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
-    tabBtnChecklist.className = 'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
+    if (viewChecklist) viewChecklist.classList.remove('hidden');
+    if (tabBtnChecklist) tabBtnChecklist.className = activeClass;
+  } else if (tabName === 'sheets') {
+    if (viewSheets) viewSheets.classList.remove('hidden');
+    if (tabBtnSheets) tabBtnSheets.className = activeClass;
+    renderSheetsView();
+  } else if (tabName === 'history') {
+    if (viewHistory) viewHistory.classList.remove('hidden');
+    if (tabBtnHistory) tabBtnHistory.className = activeClass;
     renderHistoryView();
   }
   lucide.createIcons();
+}
+
+// ==========================================
+// 8.1 SHEET UI RENDERERS & EVENT HANDLERS
+// ==========================================
+function renderSheetsView() {
+  if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
+    const countEl = document.getElementById('sheetRowCountText');
+    if (countEl) countEl.textContent = 'Chưa có dữ liệu trang tính';
+    return;
+  }
+
+  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+  if (!activeSheet) return;
+  sheetsData.activeSheetId = activeSheet.id;
+
+  // 1. Render Sheet Tabs
+  const tabsContainer = document.getElementById('sheetTabsList');
+  if (tabsContainer) {
+    tabsContainer.innerHTML = sheetsData.sheets.map(sheet => {
+      const isActive = sheet.id === activeSheet.id;
+      const count = Array.isArray(sheet.rows) ? sheet.rows.length : 0;
+      const activeClass = 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-950/40 border-emerald-500';
+      const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/5';
+
+      return `
+        <button 
+          onclick="selectSheetTab('${sheet.id}')"
+          class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition active:scale-95 ${isActive ? activeClass : inactiveClass}"
+        >
+          <span>${sheet.icon || '📄'}</span>
+          <span>${escapeHtml(sheet.name)}</span>
+          <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  // 2. Render Headers
+  const thead = document.getElementById('sheetTableHead');
+  if (thead) {
+    thead.innerHTML = `
+      <tr>
+        <th class="p-2.5 text-center w-12">#</th>
+        <th class="p-2.5">Tên / Nhãn</th>
+        <th class="p-2.5">Tài Khoản / Username</th>
+        <th class="p-2.5">Mật Khẩu</th>
+        <th class="p-2.5">Mail Khôi Phục / SĐT</th>
+        <th class="p-2.5 text-center">Trạng Thái</th>
+        <th class="p-2.5">Ghi Chú</th>
+        <th class="p-2.5 text-center w-20">Thao Tác</th>
+      </tr>
+    `;
+  }
+
+  // 3. Filter & Render Rows
+  const tbody = document.getElementById('sheetTableBody');
+  const rows = Array.isArray(activeSheet.rows) ? activeSheet.rows : [];
+  const q = (sheetSearchQuery || '').toLowerCase().trim();
+
+  const filteredRows = rows.filter(r => {
+    if (!q) return true;
+    return (
+      (r.label || '').toLowerCase().includes(q) ||
+      (r.username || '').toLowerCase().includes(q) ||
+      (r.recovery || '').toLowerCase().includes(q) ||
+      (r.status || '').toLowerCase().includes(q) ||
+      (r.note || '').toLowerCase().includes(q)
+    );
+  });
+
+  if (tbody) {
+    if (filteredRows.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="text-center py-8 text-slate-500 text-xs">
+            ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "+ Thêm Dòng" để tạo.'}
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = filteredRows.map((r, idx) => {
+        const isPwVisible = visiblePasswords.has(r.id);
+        const pwDisplay = r.password ? (isPwVisible ? escapeHtml(r.password) : '••••••••') : '<span class="text-slate-600 italic">Trống</span>';
+        
+        let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">${escapeHtml(r.status || 'Live')}</span>`;
+        if (r.status === 'Live') {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Live</span>`;
+        } else if (r.status === 'Die') {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">🔴 Die</span>`;
+        } else if (r.status === 'Sai Pass') {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">🟡 Sai Pass</span>`;
+        }
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="p-2.5 text-center text-slate-500 font-mono text-[11px]">${idx + 1}</td>
+            <td class="p-2.5 font-medium text-slate-200">
+              <div class="max-w-[160px] truncate" title="${escapeHtml(r.label || '')}">${escapeHtml(r.label || '—')}</div>
+            </td>
+            <td class="p-2.5 font-mono text-[11px] text-emerald-300">
+              <div class="flex items-center gap-1.5 max-w-[200px]">
+                <span class="truncate" title="${escapeHtml(r.username || '')}">${escapeHtml(r.username || '—')}</span>
+                ${r.username ? `<button onclick="copySheetCellText('${escapeHtml(r.username)}', 'Tài khoản')" class="text-slate-400 hover:text-white p-1" title="Sao chép"><i data-lucide="copy" class="w-3 h-3"></i></button>` : ''}
+              </div>
+            </td>
+            <td class="p-2.5 font-mono text-[11px] text-slate-300">
+              <div class="flex items-center gap-1.5">
+                <span>${pwDisplay}</span>
+                ${r.password ? `
+                  <button onclick="togglePasswordVisibility('${r.id}')" class="text-slate-400 hover:text-white p-1" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
+                    <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
+                  </button>
+                  <button onclick="copySheetCellText('${escapeHtml(r.password)}', 'Mật khẩu')" class="text-slate-400 hover:text-white p-1" title="Sao chép">
+                    <i data-lucide="copy" class="w-3 h-3"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+            <td class="p-2.5 text-slate-400 text-[11px]">
+              <div class="max-w-[160px] truncate" title="${escapeHtml(r.recovery || '')}">${escapeHtml(r.recovery || '—')}</div>
+            </td>
+            <td class="p-2.5 text-center">${statusBadge}</td>
+            <td class="p-2.5 text-slate-400 text-[11px]">
+              <div class="max-w-[180px] truncate" title="${escapeHtml(r.note || '')}">${escapeHtml(r.note || '—')}</div>
+            </td>
+            <td class="p-2.5 text-center">
+              <div class="flex items-center justify-center gap-1">
+                <button onclick="editSheetRow('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="deleteSheetRowConfirm('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // 4. Update count text
+  const countEl = document.getElementById('sheetRowCountText');
+  if (countEl) {
+    countEl.innerHTML = `Đang hiển thị <strong>${filteredRows.length}</strong> / <strong>${rows.length}</strong> dòng • Sheet: <strong>${escapeHtml(activeSheet.name)}</strong>`;
+  }
+
+  lucide.createIcons();
+}
+
+window.selectSheetTab = function(sheetId) {
+  sheetsData.activeSheetId = sheetId;
+  saveLocalSheetsData();
+  renderSheetsView();
+};
+
+window.copySheetCellText = function(text, label) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`Đã sao chép ${label}!`, 'success');
+  }).catch(() => {
+    showToast('Không thể sao chép tự động', 'info');
+  });
+};
+
+window.togglePasswordVisibility = function(rowId) {
+  if (visiblePasswords.has(rowId)) {
+    visiblePasswords.delete(rowId);
+  } else {
+    visiblePasswords.add(rowId);
+  }
+  renderSheetsView();
+};
+
+window.editSheetRow = function(rowId) {
+  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+  if (!activeSheet) return;
+  const row = (activeSheet.rows || []).find(r => r.id === rowId);
+  if (!row) return;
+
+  document.getElementById('sheetRowId').value = row.id;
+  document.getElementById('rowInputLabel').value = row.label || '';
+  document.getElementById('rowInputUsername').value = row.username || '';
+  document.getElementById('rowInputPassword').value = row.password || '';
+  document.getElementById('rowInputTwofa').value = row.twofa || '';
+  document.getElementById('rowInputRecovery').value = row.recovery || '';
+  document.getElementById('rowInputStatus').value = row.status || 'Live';
+  document.getElementById('rowInputNote').value = row.note || '';
+
+  const deleteBtn = document.getElementById('btnDeleteSheetRow');
+  if (deleteBtn) deleteBtn.classList.remove('hidden');
+
+  const titleEl = document.getElementById('modalSheetRowTitle');
+  if (titleEl) titleEl.innerHTML = '<i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i><span>Chỉnh sửa thông tin</span>';
+
+  const modal = document.getElementById('modalSheetRow');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+  lucide.createIcons();
+};
+
+window.deleteSheetRowConfirm = function(rowId) {
+  if (!confirm('Bạn có chắc muốn xóa dòng này không?')) return;
+  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+  if (!activeSheet) return;
+
+  activeSheet.rows = (activeSheet.rows || []).filter(r => r.id !== rowId);
+  triggerCloudSheetsSync();
+  renderSheetsView();
+  showToast('Đã xóa dòng thành công!', 'info');
+};
+
+function openSheetRowModal(row = null) {
+  document.getElementById('sheetRowId').value = row ? row.id : '';
+  document.getElementById('rowInputLabel').value = row ? (row.label || '') : '';
+  document.getElementById('rowInputUsername').value = row ? (row.username || '') : '';
+  document.getElementById('rowInputPassword').value = row ? (row.password || '') : '';
+  document.getElementById('rowInputTwofa').value = row ? (row.twofa || '') : '';
+  document.getElementById('rowInputRecovery').value = row ? (row.recovery || '') : '';
+  document.getElementById('rowInputStatus').value = row ? (row.status || 'Live') : 'Live';
+  document.getElementById('rowInputNote').value = row ? (row.note || '') : '';
+
+  const deleteBtn = document.getElementById('btnDeleteSheetRow');
+  if (deleteBtn) {
+    if (row) deleteBtn.classList.remove('hidden');
+    else deleteBtn.classList.add('hidden');
+  }
+
+  const titleEl = document.getElementById('modalSheetRowTitle');
+  if (titleEl) {
+    titleEl.innerHTML = row 
+      ? '<i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i><span>Chỉnh sửa thông tin</span>'
+      : '<i data-lucide="plus-circle" class="w-4 h-4 text-emerald-400"></i><span>Thêm Dòng Mới</span>';
+  }
+
+  const modal = document.getElementById('modalSheetRow');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('rowInputLabel').focus();
+  }
+  lucide.createIcons();
+}
+
+function closeSheetRowModal() {
+  const modal = document.getElementById('modalSheetRow');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function openAddSheetModal() {
+  document.getElementById('inputNewSheetName').value = '';
+  document.getElementById('inputNewSheetIcon').value = '📄';
+  const modal = document.getElementById('modalAddSheet');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('inputNewSheetName').focus();
+  }
+}
+
+function closeAddSheetModal() {
+  const modal = document.getElementById('modalAddSheet');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
 }
 
 function showToast(message, type = 'info') {
@@ -1079,6 +1483,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 1. Load config & local storage
   initConfigFromUrlOrStorage();
   loadLocalData();
+  loadLocalSheetsData();
 
   // 2. Setup Date Chips navigation
   const today = getTodayDateStr();
@@ -1119,7 +1524,144 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. Tab buttons
   document.getElementById('tabBtnChecklist').onclick = () => switchTab('checklist');
+  const tabSheetsBtn = document.getElementById('tabBtnSheets');
+  if (tabSheetsBtn) tabSheetsBtn.onclick = () => switchTab('sheets');
   document.getElementById('tabBtnHistory').onclick = () => switchTab('history');
+
+  // 3.1 Sheet listeners
+  const inputSearch = document.getElementById('inputSearchSheetRows');
+  if (inputSearch) {
+    inputSearch.addEventListener('input', (e) => {
+      sheetSearchQuery = e.target.value;
+      renderSheetsView();
+    });
+  }
+
+  const btnAddRow = document.getElementById('btnAddSheetRow');
+  if (btnAddRow) btnAddRow.onclick = () => openSheetRowModal(null);
+
+  const btnSaveSheet = document.getElementById('btnManualSaveSheet');
+  if (btnSaveSheet) btnSaveSheet.onclick = () => pushCloudSheetsData(true);
+
+  const btnNewSheet = document.getElementById('btnAddNewSheet');
+  if (btnNewSheet) btnNewSheet.onclick = () => openAddSheetModal();
+
+  // Sheet Row Modal Form submit
+  const formSheetRow = document.getElementById('formSheetRow');
+  if (formSheetRow) {
+    formSheetRow.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+      if (!activeSheet) return;
+      if (!Array.isArray(activeSheet.rows)) activeSheet.rows = [];
+
+      const rowId = document.getElementById('sheetRowId').value;
+      const label = document.getElementById('rowInputLabel').value.trim();
+      const username = document.getElementById('rowInputUsername').value.trim();
+      const password = document.getElementById('rowInputPassword').value.trim();
+      const twofa = document.getElementById('rowInputTwofa').value.trim();
+      const recovery = document.getElementById('rowInputRecovery').value.trim();
+      const status = document.getElementById('rowInputStatus').value;
+      const note = document.getElementById('rowInputNote').value.trim();
+
+      if (rowId) {
+        // Update existing row
+        const row = activeSheet.rows.find(r => r.id === rowId);
+        if (row) {
+          row.label = label;
+          row.username = username;
+          row.password = password;
+          row.twofa = twofa;
+          row.recovery = recovery;
+          row.status = status;
+          row.note = note;
+          row.updatedAt = Date.now();
+        }
+      } else {
+        // Add new row
+        const newRow = {
+          id: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          label,
+          username,
+          password,
+          twofa,
+          recovery,
+          status,
+          note,
+          createdAt: Date.now()
+        };
+        activeSheet.rows.unshift(newRow);
+      }
+
+      closeSheetRowModal();
+      triggerCloudSheetsSync();
+      renderSheetsView();
+      showToast('Đã lưu thông tin dòng thành công!', 'success');
+    });
+  }
+
+  // Delete row button in modal
+  const btnDeleteRow = document.getElementById('btnDeleteSheetRow');
+  if (btnDeleteRow) {
+    btnDeleteRow.onclick = () => {
+      const rowId = document.getElementById('sheetRowId').value;
+      if (!rowId) return;
+      if (!confirm('Bạn có chắc muốn xóa dòng này không?')) return;
+      const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+      if (!activeSheet) return;
+      activeSheet.rows = (activeSheet.rows || []).filter(r => r.id !== rowId);
+      closeSheetRowModal();
+      triggerCloudSheetsSync();
+      renderSheetsView();
+      showToast('Đã xóa dòng thành công!', 'info');
+    };
+  }
+
+  const btnCloseRowModal = document.getElementById('btnCloseSheetRowModal');
+  if (btnCloseRowModal) btnCloseRowModal.onclick = closeSheetRowModal;
+  const btnCancelRowModal = document.getElementById('btnCancelSheetRow');
+  if (btnCancelRowModal) btnCancelRowModal.onclick = closeSheetRowModal;
+
+  // Add Sheet Modal Form submit
+  const formAddSheet = document.getElementById('formAddSheet');
+  if (formAddSheet) {
+    formAddSheet.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const sheetName = document.getElementById('inputNewSheetName').value.trim();
+      const sheetIcon = document.getElementById('inputNewSheetIcon').value.trim() || '📄';
+      if (!sheetName) return;
+
+      const newSheetId = `sheet_${Date.now()}`;
+      const newSheet = {
+        id: newSheetId,
+        name: sheetName,
+        icon: sheetIcon,
+        columns: [
+          { id: 'label', name: 'Tên / Nhãn', width: 170, type: 'text' },
+          { id: 'username', name: 'Tài khoản / Mail', width: 230, type: 'copy_text' },
+          { id: 'password', name: 'Mật khẩu', width: 165, type: 'password' },
+          { id: 'recovery', name: 'Mail khôi phục / SĐT', width: 185, type: 'text' },
+          { id: 'status', name: 'Trạng thái', width: 120, type: 'status' },
+          { id: 'note', name: 'Ghi chú', width: 220, type: 'text' }
+        ],
+        rows: []
+      };
+
+      if (!Array.isArray(sheetsData.sheets)) sheetsData.sheets = [];
+      sheetsData.sheets.push(newSheet);
+      sheetsData.activeSheetId = newSheetId;
+
+      closeAddSheetModal();
+      triggerCloudSheetsSync();
+      renderSheetsView();
+      showToast(`Đã tạo trang tính "${sheetName}" thành công!`, 'success');
+    });
+  }
+
+  const btnCloseAddSheet = document.getElementById('btnCloseAddSheetModal');
+  if (btnCloseAddSheet) btnCloseAddSheet.onclick = closeAddSheetModal;
+  const btnCancelAddSheet = document.getElementById('btnCancelAddSheet');
+  if (btnCancelAddSheet) btnCancelAddSheet.onclick = closeAddSheetModal;
 
   // 4. Quick Add Form
   const formAddTask = document.getElementById('formAddTask');

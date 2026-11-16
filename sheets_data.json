@@ -1,0 +1,905 @@
+{
+  "activeSheetId": "sheet_gmail",
+  "sheets": [
+    {
+      "id": "sheet_fb",
+      "name": "Facebook",
+      "icon": "📘",
+      "defaultUrl": "https://www.facebook.com",
+      "columns": [
+        {
+          "id": "label",
+          "name": "Tên FB / Nhãn",
+          "width": 170,
+          "type": "text"
+        },
+        {
+          "id": "username",
+          "name": "Tài khoản / Gmail / SĐT",
+          "width": 230,
+          "type": "copy_text"
+        },
+        {
+          "id": "password",
+          "name": "Mật khẩu",
+          "width": 165,
+          "type": "password"
+        },
+        {
+          "id": "recovery",
+          "name": "Mail khôi phục / SĐT",
+          "width": 185,
+          "type": "text"
+        },
+        {
+          "id": "status",
+          "name": "Trạng thái",
+          "width": 120,
+          "type": "status"
+        },
+        {
+          "id": "note",
+          "name": "Ghi chú",
+          "width": 220,
+          "type": "text"
+        }
+      ],
+      "rows": [
+        {
+          "id": "fb_row_1",
+          "profileId": "a__nhan_sinh",
+          "label": "a nhan sinh",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": "Đăng nhập bằng Cookie (Profile: a__nhan_sinh)"
+        },
+        {
+          "id": "fb_row_2",
+          "profileId": "ha_linh",
+          "label": "ha linh",
+          "username": "phamtranhuy00@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "phamtranhuy00@gmail.com",
+          "status": "Live",
+          "note": "Đã lưu trong Chrome (Profile: ha_linh)"
+        },
+        {
+          "id": "fb_row_3",
+          "profileId": "hoang_son",
+          "label": "hoang son",
+          "username": "media1.tranhii@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "media1.tranhii@gmail.com",
+          "status": "Live",
+          "note": "Đã lưu trong Chrome (Profile: hoang_son)"
+        },
+        {
+          "id": "fb_row_4",
+          "profileId": "kientrung_phamtranhuy",
+          "label": "kientrung phamtranhuy",
+          "username": "phamtranhuy00@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "phamtranhuy00@gmail.com",
+          "status": "Live",
+          "note": "Đã lưu trong Chrome (Profile: kientrung_phamtranhuy)"
+        },
+        {
+          "id": "fb_row_5",
+          "profileId": "phamtranhuy",
+          "label": "phamtranhuy",
+          "username": "phamtranhuy00@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": "Đăng nhập bằng Cookie (Profile: phamtranhuy)"
+        },
+        {
+          "id": "fb_row_6",
+          "profileId": "phat_huy_hoangson",
+          "label": "phat huy hoangson",
+          "username": "media1.tranhii@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "media1.tranhii@gmail.com",
+          "status": "Live",
+          "note": "Đã lưu trong Chrome (Profile: phat_huy_hoangson)"
+        },
+        {
+          "id": "fb_row_7",
+          "profileId": "van_thanh__halinh_",
+          "label": "van thanh (halinh)",
+          "username": "tranhii003@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "tranhii003@gmail.com",
+          "status": "Live",
+          "note": "Đã lưu trong Chrome (Profile: van_thanh__halinh_)"
+        },
+        {
+          "id": "row_1794460833058_0_tyef",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460833058_1_i3fu",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460833058_2_q6rs",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794632771360_0_6aqd",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794632771360_1_tm23",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794632771360_2_50zp",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794632771360_3_o8ov",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794632771360_4_gxfj",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        }
+      ],
+      "showActions": true
+    },
+    {
+      "id": "sheet_gmail",
+      "name": "Gmail",
+      "icon": "📧",
+      "defaultUrl": "https://accounts.google.com/ServiceLogin?service=mail&continue=https://mail.google.com/mail/",
+      "columns": [
+        {
+          "id": "label",
+          "name": "Tên gợi nhớ",
+          "width": 160,
+          "type": "text"
+        },
+        {
+          "id": "username",
+          "name": "Địa chỉ Gmail",
+          "width": 240,
+          "type": "copy_text"
+        },
+        {
+          "id": "password",
+          "name": "Mật khẩu",
+          "width": 170,
+          "type": "password"
+        },
+        {
+          "id": "recovery",
+          "name": "Mail khôi phục / SĐT",
+          "width": 200,
+          "type": "text"
+        },
+        {
+          "id": "status",
+          "name": "Trạng thái",
+          "width": 120,
+          "type": "status"
+        },
+        {
+          "id": "note",
+          "name": "Ghi chú (Liên kết FB / Dịch vụ)",
+          "width": 240,
+          "type": "text"
+        }
+      ],
+      "rows": [
+        {
+          "id": "gm_row_1",
+          "label": "Tran Huy",
+          "username": "phamtranhuy00@gmail.com",
+          "password": "Tranhii.00@",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": "Liên kết FB: ha linh, kientrung phamtranhuy"
+        },
+        {
+          "id": "gm_row_2",
+          "label": "",
+          "username": "phamtranhuy1000",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "gm_row_3",
+          "label": "",
+          "username": "phamtranhuy01",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460920766_0_9wyo",
+          "label": "",
+          "username": "media1.tranhii",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460920766_1_74im",
+          "label": "",
+          "username": "media2.tranhii",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460920766_2_lchu",
+          "label": "",
+          "username": "media3.tranhii",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460920766_3_gvyl",
+          "label": "",
+          "username": "media4.tranhii",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460920766_4_07i1",
+          "label": "",
+          "username": "media5.tranhii",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794460943095_0_afl5",
+          "label": "",
+          "username": "tranhiiip1",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461208528_0_lfmb",
+          "label": "",
+          "username": "tranhiiip2",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461208528_1_g9j9",
+          "label": "",
+          "username": "tranhiiip3",
+          "password": "Tranhii.00@",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461208528_2_rc03",
+          "label": "",
+          "username": "tranhiiip1",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461208528_3_ojs9",
+          "label": "",
+          "username": "tranhiiip1",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461208528_4_9a2g",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461209973_0_gx8y",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461209974_1_jhzm",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461209974_2_735e",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461209974_3_svsw",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794461209974_4_w20d",
+          "label": "",
+          "username": "",
+          "password": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        }
+      ],
+      "showActions": true
+    },
+    {
+      "id": "sheet_1794672689552",
+      "name": "KÊNH DOUYIN",
+      "icon": "🗂️",
+      "defaultUrl": "https://www.google.com",
+      "columns": [
+        {
+          "id": "label",
+          "name": "Chủ đề / Phim",
+          "width": 200,
+          "type": "text"
+        },
+        {
+          "id": "username",
+          "name": "Tên Kênh Douyin",
+          "width": 220,
+          "type": "copy_text"
+        },
+        {
+          "id": "recovery",
+          "name": "Nội dung / Số tập",
+          "width": 180,
+          "type": "text"
+        },
+        {
+          "id": "status",
+          "name": "Trạng thái",
+          "width": 130,
+          "type": "text"
+        },
+        {
+          "id": "note",
+          "name": "Ghi chú",
+          "width": 220,
+          "type": "text"
+        }
+      ],
+      "rows": [
+        {
+          "id": "row_1794672689552_1",
+          "label": "PHIM AI ",
+          "username": "十万个挑战",
+          "password": "",
+          "twofa": "",
+          "recovery": "3OM FL",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794672704624_0_ngq3",
+          "label": "",
+          "username": "步方",
+          "password": "",
+          "twofa": "",
+          "recovery": "1 BỘ 5-6 TẬP PHIM",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794672706273_0_8ejt",
+          "label": "",
+          "username": "m01120915",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794672710679_0_bcg2",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "",
+          "note": ""
+        },
+        {
+          "id": "row_1794672713095_0_uik5",
+          "label": "AI VIỄN TƯỞNG",
+          "username": "云端避风港-Dream Shelter",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "Live",
+          "note": ""
+        },
+        {
+          "id": "row_1794672713095_1_e21l",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "",
+          "note": ""
+        },
+        {
+          "id": "row_1794672713095_2_ctq9",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "",
+          "note": ""
+        },
+        {
+          "id": "row_1794672713095_3_7imt",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "",
+          "note": ""
+        },
+        {
+          "id": "row_1794672713095_4_fs4v",
+          "label": "",
+          "username": "",
+          "password": "",
+          "twofa": "",
+          "recovery": "",
+          "status": "",
+          "note": ""
+        }
+      ],
+      "showActions": false
+    },
+    {
+      "id": "sheet_1794720138890",
+      "name": "QUẢN LÝ VIDEO TITKOK",
+      "icon": "🗂️",
+      "defaultUrl": "https://www.google.com",
+      "columns": [
+        {
+          "id": "col_title",
+          "name": "Tên Video / Tiêu đề",
+          "width": 380,
+          "type": "text"
+        },
+        {
+          "id": "col_part",
+          "name": "Tập / Phần",
+          "width": 120,
+          "type": "text"
+        },
+        {
+          "id": "col_status",
+          "name": "Trạng thái",
+          "width": 130,
+          "type": "text"
+        },
+        {
+          "id": "col_link",
+          "name": "Link Video / Kịch bản",
+          "width": 220,
+          "type": "text"
+        },
+        {
+          "id": "col_note",
+          "name": "Ghi chú",
+          "width": 240,
+          "type": "text"
+        }
+      ],
+      "rows": [
+        {
+          "id": "tt_row_1",
+          "col_title": "Phần 1: Mơ Thấy Mạt Thế Âm 80 Độ, Tôi Bán Nhà Đưa Mẹ Đi Mua Căn Hộ Suối Nước Nóng Trú Ẩn",
+          "col_part": "ĐĂNG",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_2",
+          "col_title": "Phần 2: Tuyết Rơi Trắng Trời, Hai Mẹ Con Trốn Trong Hầm Trú Ẩn Hát Karaoke Cực Chill!",
+          "col_part": "CHƯA",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_3",
+          "col_title": "Phần 3: Bão Tuyết Tận Thế Đón Tất Niên Ấm Cúng Trong Căn Nhà Suối Nước Nóng",
+          "col_part": "CHƯA",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_4",
+          "col_title": "Full tập: Tránh bão tuyết, mẹ con tôi mua căn hộ suối nước nóng",
+          "col_part": "CHƯA",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_5",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_6",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_7",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_8",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_9",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_10",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_11",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_12",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_13",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_14",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "tt_row_15",
+          "col_title": "",
+          "col_part": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        }
+      ],
+      "showActions": false
+    },
+    {
+      "id": "sheet_1794720146084",
+      "name": "QUẢN LÝ VIDEO FANPAGE",
+      "icon": "🗂️",
+      "defaultUrl": "https://www.google.com",
+      "columns": [
+        {
+          "id": "col_title",
+          "name": "Tên Video / Tiêu đề",
+          "width": 360,
+          "type": "text"
+        },
+        {
+          "id": "col_page",
+          "name": "Fanpage đăng",
+          "width": 180,
+          "type": "text"
+        },
+        {
+          "id": "col_schedule",
+          "name": "Lịch đăng",
+          "width": 140,
+          "type": "text"
+        },
+        {
+          "id": "col_status",
+          "name": "Trạng thái",
+          "width": 130,
+          "type": "text"
+        },
+        {
+          "id": "col_link",
+          "name": "Link bài viết",
+          "width": 220,
+          "type": "text"
+        },
+        {
+          "id": "col_note",
+          "name": "Ghi chú",
+          "width": 240,
+          "type": "text"
+        }
+      ],
+      "rows": [
+        {
+          "id": "fp_row_1",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_2",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_3",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_4",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_5",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_6",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_7",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_8",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_9",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_10",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_11",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_12",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_13",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_14",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        },
+        {
+          "id": "fp_row_15",
+          "col_title": "",
+          "col_page": "",
+          "col_schedule": "",
+          "col_status": "",
+          "col_link": "",
+          "col_note": ""
+        }
+      ],
+      "showActions": false
+    }
+  ]
+}
