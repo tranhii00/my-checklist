@@ -468,6 +468,21 @@ async function fetchCloudData(isManual = false) {
       }
     }
 
+    // Sync Tunnel Status if present in Gist
+    if (gistData.files && gistData.files['tunnel_status.json'] && gistData.files['tunnel_status.json'].content) {
+      try {
+        const remoteTunnel = JSON.parse(gistData.files['tunnel_status.json'].content);
+        if (remoteTunnel && typeof remoteTunnel === 'object') {
+          tunnelStatus = { ...tunnelStatus, ...remoteTunnel };
+          if (currentActiveTab === 'autofb') {
+            renderAutoFbView();
+          }
+        }
+      } catch (tunErr) {
+        console.warn('Could not parse tunnel_status.json:', tunErr);
+      }
+    }
+
     if (cloudContent) {
       try {
         const remoteData = JSON.parse(cloudContent);
@@ -1135,24 +1150,36 @@ function update1ClickUrlField() {
   if (inputEl) inputEl.value = oneClickUrl;
 }
 
+let tunnelStatus = {
+  online: false,
+  publicUrl: '',
+  mobileUrl: '',
+  pin: '686868',
+  updatedAt: 0
+};
+
 function switchTab(tabName) {
   currentActiveTab = tabName;
   const viewChecklist = document.getElementById('viewChecklist');
   const viewSheets = document.getElementById('viewSheets');
+  const viewAutoFb = document.getElementById('viewAutoFb');
   const viewHistory = document.getElementById('viewHistory');
   const tabBtnChecklist = document.getElementById('tabBtnChecklist');
   const tabBtnSheets = document.getElementById('tabBtnSheets');
+  const tabBtnAutoFb = document.getElementById('tabBtnAutoFb');
   const tabBtnHistory = document.getElementById('tabBtnHistory');
 
-  const activeClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
-  const inactiveClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
+  const activeClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
+  const inactiveClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
 
   if (viewChecklist) viewChecklist.classList.add('hidden');
   if (viewSheets) viewSheets.classList.add('hidden');
+  if (viewAutoFb) viewAutoFb.classList.add('hidden');
   if (viewHistory) viewHistory.classList.add('hidden');
 
   if (tabBtnChecklist) tabBtnChecklist.className = inactiveClass;
   if (tabBtnSheets) tabBtnSheets.className = inactiveClass;
+  if (tabBtnAutoFb) tabBtnAutoFb.className = inactiveClass;
   if (tabBtnHistory) tabBtnHistory.className = inactiveClass;
 
   if (tabName === 'checklist') {
@@ -1162,11 +1189,108 @@ function switchTab(tabName) {
     if (viewSheets) viewSheets.classList.remove('hidden');
     if (tabBtnSheets) tabBtnSheets.className = activeClass;
     renderSheetsView();
+  } else if (tabName === 'autofb') {
+    if (viewAutoFb) viewAutoFb.classList.remove('hidden');
+    if (tabBtnAutoFb) tabBtnAutoFb.className = activeClass;
+    renderAutoFbView();
   } else if (tabName === 'history') {
     if (viewHistory) viewHistory.classList.remove('hidden');
     if (tabBtnHistory) tabBtnHistory.className = activeClass;
     renderHistoryView();
   }
+  lucide.createIcons();
+}
+
+// ==========================================
+// 8.0 AUTO FB CONTROLLER
+// ==========================================
+function renderAutoFbView() {
+  const container = document.getElementById('autoFbStateContainer');
+  if (!container) return;
+
+  const now = Date.now();
+  // Laptop online if marked online and heartbeat received in last 3.5 minutes
+  const isOnline = !!(tunnelStatus.online && (now - (tunnelStatus.updatedAt || 0) < 210000) && tunnelStatus.publicUrl);
+  const targetMobileUrl = tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${tunnelStatus.pin || '686868'}&mobile=1` : '');
+
+  if (isOnline) {
+    container.innerHTML = `
+      <div class="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-cyan-950/60 rounded-2xl p-4 border border-emerald-500/30 shadow-xl flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+              <i data-lucide="laptop" class="w-5 h-5 animate-pulse"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-white">Laptop Đang Bật & Đã Kết Nối</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">Sẵn sàng điều khiển kịch bản Auto Facebook từ xa</p>
+            </div>
+          </div>
+          <button onclick="fetchCloudData(true)" class="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white" title="Làm mới">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 flex flex-col gap-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Đường hầm Cloudflare:</span>
+            <span class="font-mono text-cyan-400 font-semibold truncate max-w-[200px]">${escapeHtml(tunnelStatus.publicUrl)}</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Mã PIN xác thực:</span>
+            <span class="font-mono text-amber-400 font-bold">${escapeHtml(tunnelStatus.pin || '686868')}</span>
+          </div>
+        </div>
+
+        <a 
+          href="${targetMobileUrl}" 
+          target="_blank" 
+          rel="noreferrer"
+          class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-sm text-center shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition active:scale-95"
+        >
+          <i data-lucide="external-link" class="w-4 h-4"></i>
+          <span>Mở Bảng Điều Khiển Auto Facebook</span>
+        </a>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div class="bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-3">
+        <div class="w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/5 flex items-center justify-center text-slate-400 mb-1">
+          <i data-lucide="laptop" class="w-8 h-8 text-slate-500"></i>
+        </div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-bold text-slate-200">Laptop Hiện Đang Tắt</h3>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold border border-slate-700">○ OFFLINE</span>
+        </div>
+        <p class="text-xs text-slate-400 max-w-sm leading-relaxed">
+          Kịch bản Auto Facebook chỉ chạy khi máy tính của bạn đang mở. Khi bạn bật laptop và mở tool lên, tab này sẽ <strong class="text-cyan-400">tự động kết nối</strong> để bạn điều khiển từ xa.
+        </p>
+
+        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 w-full max-w-sm text-left text-xs text-slate-300 flex flex-col gap-1.5 mt-2">
+          <div class="flex items-center gap-2 text-emerald-400 font-semibold">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>Checklist & Bảng Tính (Sheets) vẫn dùng 24/7 bình thường</span>
+          </div>
+          <div class="text-[11px] text-slate-400 pl-6">
+            Bạn có thể chuyển sang tab <strong>Checklist</strong> hoặc <strong>Bảng Tính</strong> để xem và chỉnh sửa dữ liệu mọi lúc mọi nơi!
+          </div>
+        </div>
+
+        <button 
+          onclick="fetchCloudData(true)" 
+          class="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+        >
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Kiểm tra kết nối lại</span>
+        </button>
+      </div>
+    `;
+  }
+
   lucide.createIcons();
 }
 
@@ -1526,6 +1650,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tabBtnChecklist').onclick = () => switchTab('checklist');
   const tabSheetsBtn = document.getElementById('tabBtnSheets');
   if (tabSheetsBtn) tabSheetsBtn.onclick = () => switchTab('sheets');
+  const tabAutoFbBtn = document.getElementById('tabBtnAutoFb');
+  if (tabAutoFbBtn) tabAutoFbBtn.onclick = () => switchTab('autofb');
   document.getElementById('tabBtnHistory').onclick = () => switchTab('history');
 
   // 3.1 Sheet listeners

@@ -136,18 +136,22 @@
     </div>
   </header>
 
-  <!-- Navigation Tabs (Checklist vs Bảng Tính Sheets vs Nhật ký Lịch sử) -->
-  <div class="max-w-4xl mx-auto w-full px-4 pt-3 pb-1">
-    <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/5 shadow-inner">
-      <button id="tabBtnChecklist" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30">
+  <!-- Navigation Tabs (Checklist vs Bảng Tính Sheets vs Auto FB vs Nhật ký Lịch sử) -->
+  <div class="max-w-4xl mx-auto w-full px-3 pt-3 pb-1">
+    <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/5 shadow-inner gap-1">
+      <button id="tabBtnChecklist" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30">
         <i data-lucide="list-todo" class="w-4 h-4"></i>
         <span>Checklist</span>
       </button>
-      <button id="tabBtnSheets" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+      <button id="tabBtnSheets" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
         <i data-lucide="table-2" class="w-4 h-4 text-emerald-400"></i>
-        <span>Bảng Tính (Sheets)</span>
+        <span>Bảng Tính</span>
       </button>
-      <button id="tabBtnHistory" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+      <button id="tabBtnAutoFb" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
+        <i data-lucide="bot" class="w-4 h-4 text-cyan-400"></i>
+        <span>Auto FB</span>
+      </button>
+      <button id="tabBtnHistory" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">
         <i data-lucide="history" class="w-4 h-4"></i>
         <span>Nhật Ký</span>
       </button>
@@ -413,7 +417,14 @@
       </div>
     </div>
 
-    <!-- TAB 3: NHẬT KÝ LỊCH SỬ & KỶ LUẬT (HISTORY & STREAK VIEW) -->
+    <!-- TAB 3: ĐIỀU KHIỂN AUTO FACEBOOK (KẾT NỐI LAPTOP) -->
+    <div id="viewAutoFb" class="hidden flex flex-col gap-4">
+      <div id="autoFbStateContainer">
+        <!-- Dynamically rendered by app.js (Online or Offline) -->
+      </div>
+    </div>
+
+    <!-- TAB 4: NHẬT KÝ LỊCH SỬ & KỶ LUẬT (HISTORY & STREAK VIEW) -->
     <div id="viewHistory" class="hidden flex flex-col gap-4">
       
       <!-- Discipline Streak Header Card -->
