@@ -205,12 +205,26 @@ const DUMMY_TITLES = new Set([
   'Uống đủ 2 lít nước & vận động thể chất',
   'Kiểm thử Tự động Hóa Công việc Hàng ngày (QA Bot)',
   'Unit Test Task 1',
-  'Offline Sync Unit Task'
+  'Offline Sync Unit Task',
+  'Chạy chiến dịch Seeding 50 nhóm Bất Động Sản',
+  'Nuôi & Lướt Newfeed cho dàn 10 Nick mới',
+  'Xử lý checkpoint Nick Admin Page',
+  'Nghiên cứu kịch bản TikTok & StoryFlow AI'
 ]);
 
 function isUserTask(t) {
   if (!t || !t.title || typeof t.title !== 'string') return false;
-  return !DUMMY_TITLES.has(t.title.trim());
+  const title = t.title.trim();
+  if (!title) return false;
+  if (DUMMY_TITLES.has(title)) return false;
+  const idStr = String(t.id || '');
+  if (idStr.startsWith('task_sample_')) return false;
+  if (Array.isArray(appData.deletedIds) && appData.deletedIds.includes(idStr)) return false;
+  const lower = title.toLowerCase();
+  if (lower.includes('chạy chiến dịch seeding 50 nhóm') || lower.includes('nuôi & lướt newfeed') || lower.includes('xử lý checkpoint nick') || lower.includes('nghiên cứu kịch bản tiktok')) {
+    return false;
+  }
+  return true;
 }
 
 function loadLocalData() {
@@ -218,11 +232,15 @@ function loadLocalData() {
   if (localRaw) {
     try {
       appData = JSON.parse(localRaw);
+      if (!Array.isArray(appData.deletedIds)) {
+        appData.deletedIds = [];
+      }
+      const deletedSet = new Set(appData.deletedIds);
       if (!Array.isArray(appData.tasks)) {
         appData.tasks = [];
       } else {
         appData.tasks = appData.tasks
-          .filter(isUserTask)
+          .filter(t => isUserTask(t) && !deletedSet.has(t.id))
           .map(t => ({
             ...t,
             date: t.date || t.dateKey || getTodayDateStr(),
@@ -241,33 +259,21 @@ function loadLocalData() {
 }
 
 function resetToDefaultData() {
-  const recoveredTasks = [];
   const legacyKeys = ['fb_auto_tasks_cache', 'fb_auto_tasks_outbox', 'my_checklist_backup', 'tasks_cache', 'tasks', 'user_tasks'];
   for (const lk of legacyKeys) {
     try {
-      const raw = localStorage.getItem(lk);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.tasks) ? parsed.tasks : []);
-        for (const item of list) {
-          if (isUserTask(item)) {
-            recoveredTasks.push({
-              ...item,
-              date: item.date || item.dateKey || getTodayDateStr(),
-              dateKey: item.dateKey || item.date || getTodayDateStr(),
-              time: item.time || item.dueTime || '',
-              dueTime: item.dueTime || item.time || ''
-            });
-          }
-        }
-      }
+      localStorage.removeItem(lk);
     } catch (_) {}
   }
 
   appData = {
     version: 1,
     updatedAt: Date.now(),
-    tasks: recoveredTasks,
+    tasks: [],
+    deletedIds: [
+      'task_sample_1', 'task_sample_2', 'task_sample_3', 'task_sample_4',
+      'task_sample_5', 'task_sample_6', 'task_sample_7', 'task_sample_8'
+    ],
     history: []
   };
   saveLocalData();
@@ -486,9 +492,15 @@ async function fetchCloudData(isManual = false) {
     if (cloudContent) {
       try {
         const remoteData = JSON.parse(cloudContent);
+        // Merge tombstones (deletedIds)
+        const localDeleted = new Set(Array.isArray(appData.deletedIds) ? appData.deletedIds : []);
+        const remoteDeleted = new Set(Array.isArray(remoteData.deletedIds) ? remoteData.deletedIds : []);
+        const allDeleted = new Set([...localDeleted, ...remoteDeleted]);
+        appData.deletedIds = Array.from(allDeleted);
+
         const rawRemote = Array.isArray(remoteData.tasks) ? remoteData.tasks : [];
         const remoteTasks = rawRemote
-          .filter(isUserTask)
+          .filter(t => isUserTask(t) && !allDeleted.has(t.id))
           .map(t => ({
             ...t,
             date: t.date || t.dateKey || getTodayDateStr(),
@@ -497,18 +509,20 @@ async function fetchCloudData(isManual = false) {
             dueTime: t.dueTime || t.time || ''
           }));
 
-        // Non-destructive 2-way union merge
+        // Non-destructive 2-way union merge respecting deleted tombstones
         const taskMap = new Map();
         for (const lt of (appData.tasks || [])) {
-          if (isUserTask(lt)) taskMap.set(lt.id, lt);
+          if (isUserTask(lt) && !allDeleted.has(lt.id)) taskMap.set(lt.id, lt);
         }
         for (const rt of remoteTasks) {
-          if (!taskMap.has(rt.id)) {
-            taskMap.set(rt.id, rt);
-          } else {
-            const lt = taskMap.get(rt.id);
-            if ((rt.updatedAt || 0) > (lt.updatedAt || 0)) {
+          if (!allDeleted.has(rt.id) && isUserTask(rt)) {
+            if (!taskMap.has(rt.id)) {
               taskMap.set(rt.id, rt);
+            } else {
+              const lt = taskMap.get(rt.id);
+              if ((rt.updatedAt || 0) > (lt.updatedAt || 0)) {
+                taskMap.set(rt.id, rt);
+              }
             }
           }
         }
@@ -682,7 +696,15 @@ function deleteTask(taskId) {
   if (index === -1) return;
 
   const deletedTask = appData.tasks.splice(index, 1)[0];
+  if (!Array.isArray(appData.deletedIds)) {
+    appData.deletedIds = [];
+  }
+  if (!appData.deletedIds.includes(taskId)) {
+    appData.deletedIds.push(taskId);
+  }
+  saveLocalData();
   triggerCloudSync();
+  renderApp();
   showToast(`Đã xóa: ${deletedTask.title.substring(0, 25)}...`, 'info');
 }
 
@@ -1152,11 +1174,64 @@ function update1ClickUrlField() {
 
 let tunnelStatus = {
   online: false,
+  laptopActive: false,
   publicUrl: '',
   mobileUrl: '',
+  lanMobileUrl: '',
+  lanUrl: '',
   pin: '686868',
   updatedAt: 0
 };
+
+let autofbPollTimer = null;
+let isEmbeddedIframeOpen = false;
+
+async function checkTunnelStatusDirectly(manual = false) {
+  const btnRefresh = document.getElementById('btnRefreshAutoFbState');
+  if (btnRefresh) {
+    const icon = btnRefresh.querySelector('i');
+    if (icon) icon.classList.add('animate-spin');
+  }
+
+  try {
+    const gistId = cloudConfig.gistId || PRESET_GIST_ID;
+    const token = cloudConfig.token || PRESET_TOKEN;
+    if (!gistId) return;
+
+    const url = `https://api.github.com/gists/${gistId}?_t=${Date.now()}`;
+    const headers = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.files && data.files['tunnel_status.json'] && data.files['tunnel_status.json'].content) {
+        const parsed = JSON.parse(data.files['tunnel_status.json'].content);
+        if (parsed && typeof parsed === 'object') {
+          tunnelStatus = { ...tunnelStatus, ...parsed };
+          renderAutoFbView();
+          if (manual) {
+            showToast(tunnelStatus.online ? 'Đã kết nối thành công với Laptop!' : 'Đã kiểm tra: Laptop hiện đang tắt.', tunnelStatus.online ? 'success' : 'info');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[AutoFB] Check tunnel status error:', err);
+    if (manual) showToast('Lỗi kiểm tra kết nối: ' + err.message, 'error');
+  } finally {
+    if (btnRefresh) {
+      const icon = btnRefresh.querySelector('i');
+      if (icon) icon.classList.remove('animate-spin');
+    }
+    lucide.createIcons();
+  }
+}
+
+function toggleEmbedAutoFb() {
+  isEmbeddedIframeOpen = !isEmbeddedIframeOpen;
+  renderAutoFbView();
+}
 
 function switchTab(tabName) {
   currentActiveTab = tabName;
@@ -1185,18 +1260,28 @@ function switchTab(tabName) {
   if (tabName === 'checklist') {
     if (viewChecklist) viewChecklist.classList.remove('hidden');
     if (tabBtnChecklist) tabBtnChecklist.className = activeClass;
+    if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
   } else if (tabName === 'sheets') {
     if (viewSheets) viewSheets.classList.remove('hidden');
     if (tabBtnSheets) tabBtnSheets.className = activeClass;
     renderSheetsView();
+    if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
   } else if (tabName === 'autofb') {
     if (viewAutoFb) viewAutoFb.classList.remove('hidden');
     if (tabBtnAutoFb) tabBtnAutoFb.className = activeClass;
     renderAutoFbView();
+    checkTunnelStatusDirectly(false);
+    if (autofbPollTimer) clearInterval(autofbPollTimer);
+    autofbPollTimer = setInterval(() => {
+      if (currentActiveTab === 'autofb') {
+        checkTunnelStatusDirectly(false);
+      }
+    }, 7000);
   } else if (tabName === 'history') {
     if (viewHistory) viewHistory.classList.remove('hidden');
     if (tabBtnHistory) tabBtnHistory.className = activeClass;
     renderHistoryView();
+    if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
   }
   lucide.createIcons();
 }
@@ -1209,51 +1294,92 @@ function renderAutoFbView() {
   if (!container) return;
 
   const now = Date.now();
-  // Laptop online if marked online and heartbeat received in last 3.5 minutes
-  const isOnline = !!(tunnelStatus.online && (now - (tunnelStatus.updatedAt || 0) < 210000) && tunnelStatus.publicUrl);
-  const targetMobileUrl = tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${tunnelStatus.pin || '686868'}&mobile=1` : '');
+  // Laptop online if marked online and updated within the last 15 minutes
+  const isHeartbeatFresh = (now - (tunnelStatus.updatedAt || 0) < 900000);
+  const isOnline = !!(tunnelStatus.online && tunnelStatus.publicUrl && isHeartbeatFresh);
+  const pin = tunnelStatus.pin || '686868';
+  const targetMobileUrl = tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
+  const lanMobileUrl = tunnelStatus.lanMobileUrl || (tunnelStatus.lanUrl ? `${tunnelStatus.lanUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
 
   if (isOnline) {
     container.innerHTML = `
-      <div class="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-cyan-950/60 rounded-2xl p-4 border border-emerald-500/30 shadow-xl flex flex-col gap-3">
+      <div class="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-cyan-950/70 rounded-2xl p-4 sm:p-5 border border-emerald-500/30 shadow-xl flex flex-col gap-3.5">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <i data-lucide="laptop" class="w-5 h-5 animate-pulse"></i>
+            <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shadow-inner">
+              <i data-lucide="laptop" class="w-5 h-5 animate-pulse text-emerald-400"></i>
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-sm font-bold text-white">Laptop Đang Bật & Đã Kết Nối</span>
+                <span class="text-sm sm:text-base font-bold text-white">Laptop Đang Bật & Đã Kết Nối</span>
                 <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">Sẵn sàng điều khiển kịch bản Auto Facebook từ xa</p>
             </div>
           </div>
-          <button onclick="fetchCloudData(true)" class="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white" title="Làm mới">
+          <button id="btnRefreshAutoFbState" onclick="checkTunnelStatusDirectly(true)" class="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition active:scale-95" title="Kiểm tra lại">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
           </button>
         </div>
 
-        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 flex flex-col gap-2">
-          <div class="flex items-center justify-between text-xs">
+        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 flex flex-col gap-2 text-xs">
+          <div class="flex items-center justify-between">
             <span class="text-slate-400">Đường hầm Cloudflare:</span>
-            <span class="font-mono text-cyan-400 font-semibold truncate max-w-[200px]">${escapeHtml(tunnelStatus.publicUrl)}</span>
+            <span class="font-mono text-cyan-400 font-semibold truncate max-w-[220px]">${escapeHtml(tunnelStatus.publicUrl)}</span>
           </div>
-          <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center justify-between">
             <span class="text-slate-400">Mã PIN xác thực:</span>
-            <span class="font-mono text-amber-400 font-bold">${escapeHtml(tunnelStatus.pin || '686868')}</span>
+            <span class="font-mono text-amber-400 font-bold tracking-wider">${escapeHtml(pin)}</span>
           </div>
+          ${lanMobileUrl ? `
+          <div class="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
+            <span class="text-slate-400">Mạng Wi-Fi nội bộ:</span>
+            <a href="${lanMobileUrl}" target="_blank" rel="noreferrer" class="text-emerald-400 hover:underline font-mono truncate max-w-[200px]">
+              ${escapeHtml(tunnelStatus.lanUrl || 'Mạng LAN')} ↗
+            </a>
+          </div>
+          ` : ''}
         </div>
 
-        <a 
-          href="${targetMobileUrl}" 
-          target="_blank" 
-          rel="noreferrer"
-          class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-sm text-center shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition active:scale-95"
-        >
-          <i data-lucide="external-link" class="w-4 h-4"></i>
-          <span>Mở Bảng Điều Khiển Auto Facebook</span>
-        </a>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          <a 
+            href="${targetMobileUrl}" 
+            target="_blank" 
+            rel="noreferrer"
+            class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-xs sm:text-sm text-center shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition active:scale-95"
+          >
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+            <span>Mở Tab Riêng (Toàn Màn Hình)</span>
+          </a>
+
+          <button 
+            type="button"
+            onclick="toggleEmbedAutoFb()" 
+            class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold text-xs sm:text-sm text-center border border-white/10 flex items-center justify-center gap-2 transition active:scale-95"
+          >
+            <i data-lucide="${isEmbeddedIframeOpen ? 'minimize-2' : 'smartphone'}" class="w-4 h-4"></i>
+            <span>${isEmbeddedIframeOpen ? 'Thu Gọn Màn Hình Nhúng' : 'Xem Trực Tiếp Trên Trang Này'}</span>
+          </button>
+        </div>
+
+        ${isEmbeddedIframeOpen ? `
+        <div class="mt-2 rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950 flex flex-col">
+          <div class="bg-slate-900/90 px-3 py-2 flex items-center justify-between border-b border-white/10 text-xs">
+            <span class="text-slate-300 font-semibold flex items-center gap-1.5">
+              <i data-lucide="smartphone" class="w-3.5 h-3.5 text-cyan-400"></i>
+              Bảng Điều Khiển Auto FB (Trực Tiếp)
+            </span>
+            <button onclick="toggleEmbedAutoFb()" class="text-slate-400 hover:text-white text-xs font-bold px-2 py-0.5 rounded bg-slate-800">
+              Đóng ✕
+            </button>
+          </div>
+          <iframe 
+            src="${targetMobileUrl}" 
+            class="w-full h-[620px] border-0 bg-slate-950"
+            title="Auto Facebook Remote Dashboard"
+          ></iframe>
+        </div>
+        ` : ''}
       </div>
     `;
   } else {
@@ -1263,11 +1389,11 @@ function renderAutoFbView() {
           <i data-lucide="laptop" class="w-8 h-8 text-slate-500"></i>
         </div>
         <div class="flex items-center gap-2">
-          <h3 class="text-base font-bold text-slate-200">Laptop Hiện Đang Tắt</h3>
+          <h3 class="text-base font-bold text-slate-200">Laptop Hiện Đang Tắt hoặc Chưa Mở Tool</h3>
           <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold border border-slate-700">○ OFFLINE</span>
         </div>
         <p class="text-xs text-slate-400 max-w-sm leading-relaxed">
-          Kịch bản Auto Facebook chỉ chạy khi máy tính của bạn đang mở. Khi bạn bật laptop và mở tool lên, tab này sẽ <strong class="text-cyan-400">tự động kết nối</strong> để bạn điều khiển từ xa.
+          Kịch bản Auto Facebook chỉ chạy khi máy tính của bạn đang mở tool. Hãy mở shortcut <strong>Auto Post FB</strong> trên màn hình Laptop, tab này sẽ <strong class="text-cyan-400">tự động chuyển sang ONLINE trong 3-5 giây</strong>!
         </p>
 
         <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 w-full max-w-sm text-left text-xs text-slate-300 flex flex-col gap-1.5 mt-2">
@@ -1276,16 +1402,17 @@ function renderAutoFbView() {
             <span>Checklist & Bảng Tính (Sheets) vẫn dùng 24/7 bình thường</span>
           </div>
           <div class="text-[11px] text-slate-400 pl-6">
-            Bạn có thể chuyển sang tab <strong>Checklist</strong> hoặc <strong>Bảng Tính</strong> để xem và chỉnh sửa dữ liệu mọi lúc mọi nơi!
+            Bạn có thể chuyển sang tab <strong>Checklist</strong> hoặc <strong>Bảng Tính</strong> để làm việc trên điện thoại bất cứ lúc nào!
           </div>
         </div>
 
         <button 
-          onclick="fetchCloudData(true)" 
-          class="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+          id="btnRefreshAutoFbState"
+          onclick="checkTunnelStatusDirectly(true)" 
+          class="mt-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 border border-white/10"
         >
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-          <span>Kiểm tra kết nối lại</span>
+          <span>Bấm kiểm tra kết nối lại ngay</span>
         </button>
       </div>
     `;
