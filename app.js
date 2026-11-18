@@ -4,6 +4,34 @@
  */
 
 // ==========================================
+// 0. SAFE RUNTIME & COMPATIBILITY HELPERS (SAFARI / WEBKIT SHIELD)
+// ==========================================
+function safeEscapeHtml(val) {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+const escapeHtml = safeEscapeHtml;
+
+function safeParseDate(input) {
+  if (!input) return new Date();
+  if (input instanceof Date) return isNaN(input.getTime()) ? new Date() : input;
+  const str = String(input).trim().replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+if (typeof window !== 'undefined') {
+  window.safeEscapeHtml = safeEscapeHtml;
+  window.escapeHtml = safeEscapeHtml;
+  window.safeParseDate = safeParseDate;
+}
+
+// ==========================================
 // 1. CONSTANTS & DEFAULT CONFIGURATION
 // ==========================================
 // Default Gist configuration
@@ -110,16 +138,17 @@ function getRelativeDateLabel(dateStr) {
 
 function formatTime(isoOrTimeStr) {
   if (!isoOrTimeStr) return '';
-  if (isoOrTimeStr.length === 5 && isoOrTimeStr.includes(':')) {
+  if (typeof isoOrTimeStr === 'string' && isoOrTimeStr.length === 5 && isoOrTimeStr.includes(':')) {
     return isoOrTimeStr;
   }
   try {
-    const d = new Date(isoOrTimeStr);
+    const d = safeParseDate(isoOrTimeStr);
+    if (isNaN(d.getTime())) return String(isoOrTimeStr);
     const h = String(d.getHours()).padStart(2, '0');
     const m = String(d.getMinutes()).padStart(2, '0');
     return `${h}:${m}`;
   } catch (e) {
-    return isoOrTimeStr;
+    return String(isoOrTimeStr);
   }
 }
 
@@ -479,7 +508,12 @@ async function fetchCloudData(isManual = false) {
       try {
         const remoteTunnel = JSON.parse(gistData.files['tunnel_status.json'].content);
         if (remoteTunnel && typeof remoteTunnel === 'object') {
-          tunnelStatus = { ...tunnelStatus, ...remoteTunnel };
+          const cleanUrl = remoteTunnel.tunnel_url || remoteTunnel.mobileUrl || (remoteTunnel.publicUrl ? `${remoteTunnel.publicUrl.replace(/\/$/, '')}/?pin=${remoteTunnel.pin || '686868'}&mobile=1` : '');
+          tunnelStatus = {
+            ...tunnelStatus,
+            ...remoteTunnel,
+            tunnel_url: cleanUrl || remoteTunnel.tunnel_url || remoteTunnel.publicUrl || ''
+          };
           if (currentActiveTab === 'autofb') {
             renderAutoFbView();
           }
@@ -520,6 +554,7 @@ async function fetchCloudData(isManual = false) {
               taskMap.set(rt.id, rt);
             } else {
               const lt = taskMap.get(rt.id);
+              // So sánh (rt.updatedAt || 0) > (lt.updatedAt || 0). Nếu rt.updatedAt === lt.updatedAt hoặc thiếu, ưu tiên giữ local để không mất thao tác vừa thực hiện
               if ((rt.updatedAt || 0) > (lt.updatedAt || 0)) {
                 taskMap.set(rt.id, rt);
               }
@@ -532,7 +567,15 @@ async function fetchCloudData(isManual = false) {
         saveLocalData();
         renderApp();
 
-        if (mergedList.length > remoteTasks.length) {
+        let hasLocalNewer = false;
+        for (const t of mergedList) {
+          const rt = remoteTasks.find(r => r.id === t.id);
+          if (!rt || (t.updatedAt || 0) > (rt.updatedAt || 0)) {
+            hasLocalNewer = true;
+            break;
+          }
+        }
+        if (hasLocalNewer || mergedList.length > remoteTasks.length) {
           pushCloudData(false);
         }
         setSyncStatusUI('synced', 'Đã đồng bộ');
@@ -553,7 +596,7 @@ async function fetchCloudData(isManual = false) {
 }
 
 // Push local data to GitHub Gist
-async function pushCloudData(isManual = false) {
+async function pushCloudData(isManual = false, options = {}) {
   if (!navigator.onLine) {
     setSyncStatusUI('offline', 'Thiết bị đang offline, đã lưu Local');
     return;
@@ -580,7 +623,7 @@ async function pushCloudData(isManual = false) {
       }
     };
 
-    const res = await fetch(`https://api.github.com/gists/${cloudConfig.gistId}`, {
+    const fetchConfig = {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${cloudConfig.token}`,
@@ -588,7 +631,13 @@ async function pushCloudData(isManual = false) {
         'Accept': 'application/vnd.github.v3+json'
       },
       body: JSON.stringify(payload)
-    });
+    };
+
+    if (options && options.keepalive) {
+      fetchConfig.keepalive = true;
+    }
+
+    const res = await fetch(`https://api.github.com/gists/${cloudConfig.gistId}`, fetchConfig);
 
     if (!res.ok) {
       throw new Error(`GitHub Gist Update failed: ${res.status}`);
@@ -615,6 +664,7 @@ function triggerCloudSync() {
   setSyncStatusUI('syncing');
 
   syncDebounceTimer = setTimeout(() => {
+    syncDebounceTimer = null;
     pushCloudData(false);
   }, 1000); // 1s debounce
 }
@@ -625,8 +675,9 @@ function triggerCloudSync() {
 function addTask(title, dateStr, timeStr = '', noteStr = '') {
   if (!title || !title.trim()) return;
 
+  const now = Date.now();
   const newTask = {
-    id: 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    id: 'task_' + now + '_' + Math.random().toString(36).substr(2, 5),
     title: title.trim(),
     date: dateStr || selectedDate,
     dateKey: dateStr || selectedDate,
@@ -635,10 +686,12 @@ function addTask(title, dateStr, timeStr = '', noteStr = '') {
     note: noteStr || '',
     completed: false,
     completedAt: null,
-    createdAt: Date.now()
+    createdAt: now,
+    updatedAt: now
   };
 
   appData.tasks.unshift(newTask);
+  appData.updatedAt = now;
   triggerCloudSync();
   showToast('Đã thêm công việc mới!', 'success');
 }
@@ -647,8 +700,14 @@ function toggleTaskComplete(taskId) {
   const task = appData.tasks.find(t => t.id === taskId);
   if (!task) return;
 
+  const now = Date.now();
   task.completed = !task.completed;
   task.completedAt = task.completed ? new Date().toISOString() : null;
+  task.updatedAt = now;
+  appData.updatedAt = now;
+
+  saveLocalData();
+  renderApp();
 
   if (task.completed) {
     playTaskCompleteSound();
@@ -664,13 +723,19 @@ function moveTaskToTomorrow(taskId) {
   const task = appData.tasks.find(t => t.id === taskId);
   if (!task) return;
 
+  const now = Date.now();
   const currentTaskDate = task.date || selectedDate;
   const tomorrowDateStr = addDaysToDateStr(currentTaskDate, 1);
   task.date = tomorrowDateStr;
+  task.dateKey = tomorrowDateStr;
+  task.updatedAt = now;
+  appData.updatedAt = now;
 
   const shortDate = formatShortVNDate(tomorrowDateStr);
   showToast(`Đã dời sang ngày mai (${shortDate})!`, 'info');
 
+  saveLocalData();
+  renderApp();
   triggerCloudSync();
 }
 
@@ -681,13 +746,19 @@ function moveAllPendingToTomorrow() {
     return;
   }
 
+  const now = Date.now();
   const tomorrowDateStr = addDaysToDateStr(selectedDate, 1);
   pendingTasks.forEach(task => {
     task.date = tomorrowDateStr;
+    task.dateKey = tomorrowDateStr;
+    task.updatedAt = now;
   });
+  appData.updatedAt = now;
 
   const shortDate = formatShortVNDate(tomorrowDateStr);
   showToast(`Đã dời ${pendingTasks.length} việc sang ngày mai (${shortDate})!`, 'success');
+  saveLocalData();
+  renderApp();
   triggerCloudSync();
 }
 
@@ -702,9 +773,11 @@ function deleteTask(taskId) {
   if (!appData.deletedIds.includes(taskId)) {
     appData.deletedIds.push(taskId);
   }
+  const now = Date.now();
+  appData.updatedAt = now;
   saveLocalData();
-  triggerCloudSync();
   renderApp();
+  triggerCloudSync();
   showToast(`Đã xóa: ${deletedTask.title.substring(0, 25)}...`, 'info');
 }
 
@@ -712,11 +785,16 @@ function updateTask(taskId, newTitle, newDate, newTime, newNote) {
   const task = appData.tasks.find(t => t.id === taskId);
   if (!task) return;
 
+  const now = Date.now();
   task.title = newTitle.trim();
   task.date = newDate;
   task.time = newTime;
   task.note = newNote;
+  task.updatedAt = now;
+  appData.updatedAt = now;
 
+  saveLocalData();
+  renderApp();
   triggerCloudSync();
   showToast('Đã lưu thay đổi công việc!', 'success');
 }
@@ -1175,6 +1253,7 @@ function update1ClickUrlField() {
 let tunnelStatus = {
   online: false,
   laptopActive: false,
+  tunnel_url: '',
   publicUrl: '',
   mobileUrl: '',
   lanMobileUrl: '',
@@ -1184,7 +1263,6 @@ let tunnelStatus = {
 };
 
 let autofbPollTimer = null;
-let isEmbeddedIframeOpen = false;
 
 async function checkTunnelStatusDirectly(manual = false) {
   const btnRefresh = document.getElementById('btnRefreshAutoFbState');
@@ -1208,7 +1286,12 @@ async function checkTunnelStatusDirectly(manual = false) {
       if (data.files && data.files['tunnel_status.json'] && data.files['tunnel_status.json'].content) {
         const parsed = JSON.parse(data.files['tunnel_status.json'].content);
         if (parsed && typeof parsed === 'object') {
-          tunnelStatus = { ...tunnelStatus, ...parsed };
+          const cleanUrl = parsed.tunnel_url || parsed.mobileUrl || (parsed.publicUrl ? `${parsed.publicUrl.replace(/\/$/, '')}/?pin=${parsed.pin || '686868'}&mobile=1` : '');
+          tunnelStatus = {
+            ...tunnelStatus,
+            ...parsed,
+            tunnel_url: cleanUrl || parsed.tunnel_url || parsed.publicUrl || ''
+          };
           renderAutoFbView();
           if (manual) {
             showToast(tunnelStatus.online ? 'Đã kết nối thành công với Laptop!' : 'Đã kiểm tra: Laptop hiện đang tắt.', tunnelStatus.online ? 'success' : 'info');
@@ -1228,10 +1311,15 @@ async function checkTunnelStatusDirectly(manual = false) {
   }
 }
 
-function toggleEmbedAutoFb() {
-  isEmbeddedIframeOpen = !isEmbeddedIframeOpen;
-  renderAutoFbView();
-}
+window.reloadAutoFbIframe = function() {
+  const iframe = document.getElementById('autoFbIframe');
+  if (iframe) {
+    const src = iframe.src;
+    iframe.src = '';
+    setTimeout(() => { iframe.src = src; }, 100);
+    showToast('Đang nạp lại bảng điều khiển FB...', 'info');
+  }
+};
 
 function switchTab(tabName) {
   currentActiveTab = tabName;
@@ -1264,8 +1352,8 @@ function switchTab(tabName) {
   } else if (tabName === 'sheets') {
     if (viewSheets) viewSheets.classList.remove('hidden');
     if (tabBtnSheets) tabBtnSheets.className = activeClass;
-    renderSheetsView();
     if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
+    loadAndRenderSheetsTab();
   } else if (tabName === 'autofb') {
     if (viewAutoFb) viewAutoFb.classList.remove('hidden');
     if (tabBtnAutoFb) tabBtnAutoFb.className = activeClass;
@@ -1293,281 +1381,386 @@ function renderAutoFbView() {
   const container = document.getElementById('autoFbStateContainer');
   if (!container) return;
 
-  const now = Date.now();
-  // Laptop online if marked online and updated within the last 15 minutes
-  const isHeartbeatFresh = (now - (tunnelStatus.updatedAt || 0) < 900000);
-  const isOnline = !!(tunnelStatus.online && tunnelStatus.publicUrl && isHeartbeatFresh);
-  const pin = tunnelStatus.pin || '686868';
-  const targetMobileUrl = tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
-  const lanMobileUrl = tunnelStatus.lanMobileUrl || (tunnelStatus.lanUrl ? `${tunnelStatus.lanUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
+  try {
+    const pin = tunnelStatus.pin || '686868';
+    const targetUrl = tunnelStatus.tunnel_url || tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
 
-  if (isOnline) {
-    container.innerHTML = `
-      <div class="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-cyan-950/70 rounded-2xl p-4 sm:p-5 border border-emerald-500/30 shadow-xl flex flex-col gap-3.5">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shadow-inner">
-              <i data-lucide="laptop" class="w-5 h-5 animate-pulse text-emerald-400"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-sm sm:text-base font-bold text-white">Laptop Đang Bật & Đã Kết Nối</span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+    if (targetUrl) {
+      container.innerHTML = `
+        <div class="flex flex-col gap-2.5 w-full">
+          <!-- Thanh công cụ phía trên iframe -->
+          <div class="bg-slate-900/90 rounded-2xl p-2.5 sm:p-3 border border-emerald-500/30 shadow-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2.5">
+              <span class="relative flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-white text-xs sm:text-sm">Laptop Online (Đã kết nối)</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+                </div>
+                <p class="text-[11px] text-slate-400">Giao diện điều khiển Auto Facebook từ xa</p>
               </div>
-              <p class="text-xs text-slate-400 mt-0.5">Sẵn sàng điều khiển kịch bản Auto Facebook từ xa</p>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button 
+                type="button"
+                onclick="reloadAutoFbIframe()" 
+                class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition active:scale-95" 
+                title="Nạp lại bảng điều khiển"
+              >
+                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                <span>Nạp lại</span>
+              </button>
+
+              <a 
+                href="${escapeHtml(targetUrl)}" 
+                target="_blank" 
+                rel="noreferrer" 
+                class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold flex items-center gap-1.5 text-xs transition shadow-md shadow-emerald-950/40 active:scale-95"
+                title="Mở tab mới toàn màn hình"
+              >
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span>Mở toàn màn hình</span>
+              </a>
+
+              <button 
+                type="button"
+                id="btnRefreshAutoFbState"
+                onclick="checkTunnelStatusDirectly(true)" 
+                class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition active:scale-95 border border-white/5" 
+                title="Kiểm tra lại kết nối"
+              >
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              </button>
             </div>
           </div>
-          <button id="btnRefreshAutoFbState" onclick="checkTunnelStatusDirectly(true)" class="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition active:scale-95" title="Kiểm tra lại">
-            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-          </button>
-        </div>
 
-        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 flex flex-col gap-2 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="text-slate-400">Đường hầm Cloudflare:</span>
-            <span class="font-mono text-cyan-400 font-semibold truncate max-w-[220px]">${escapeHtml(tunnelStatus.publicUrl)}</span>
+          <!-- Nhúng trực tiếp iframe giao diện điều khiển FB -->
+          <div class="relative w-full rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950 flex flex-col">
+            <iframe 
+              id="autoFbIframe"
+              src="${escapeHtml(targetUrl)}" 
+              class="w-full border-0 bg-slate-950 block"
+              style="height: calc(100dvh - 180px); min-height: 480px;"
+              allow="clipboard-read; clipboard-write; fullscreen"
+              sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
+              title="Bảng Điều Khiển Auto Facebook"
+            ></iframe>
           </div>
-          <div class="flex items-center justify-between">
-            <span class="text-slate-400">Mã PIN xác thực:</span>
-            <span class="font-mono text-amber-400 font-bold tracking-wider">${escapeHtml(pin)}</span>
-          </div>
-          ${lanMobileUrl ? `
-          <div class="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
-            <span class="text-slate-400">Mạng Wi-Fi nội bộ:</span>
-            <a href="${lanMobileUrl}" target="_blank" rel="noreferrer" class="text-emerald-400 hover:underline font-mono truncate max-w-[200px]">
-              ${escapeHtml(tunnelStatus.lanUrl || 'Mạng LAN')} ↗
-            </a>
-          </div>
-          ` : ''}
         </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-4">
+          <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
+            <i data-lucide="laptop" class="w-8 h-8 text-amber-400"></i>
+          </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-          <a 
-            href="${targetMobileUrl}" 
-            target="_blank" 
-            rel="noreferrer"
-            class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-xs sm:text-sm text-center shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition active:scale-95"
-          >
-            <i data-lucide="external-link" class="w-4 h-4"></i>
-            <span>Mở Tab Riêng (Toàn Màn Hình)</span>
-          </a>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-bold text-slate-200">Đang chờ Laptop mở công cụ Auto FB</h3>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">○ CHỜ KẾT NỐI</span>
+          </div>
 
-          <button 
-            type="button"
-            onclick="toggleEmbedAutoFb()" 
-            class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold text-xs sm:text-sm text-center border border-white/10 flex items-center justify-center gap-2 transition active:scale-95"
-          >
-            <i data-lucide="${isEmbeddedIframeOpen ? 'minimize-2' : 'smartphone'}" class="w-4 h-4"></i>
-            <span>${isEmbeddedIframeOpen ? 'Thu Gọn Màn Hình Nhúng' : 'Xem Trực Tiếp Trên Trang Này'}</span>
-          </button>
-        </div>
+          <p class="text-xs text-slate-300 max-w-md leading-relaxed">
+            Để điều khiển Facebook trực tiếp trên tab này, hãy mở file hoặc shortcut <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong> trên Laptop. Đường hầm bảo mật sẽ tự động kích hoạt và gửi liên kết kết nối lên Gist!
+          </p>
 
-        ${isEmbeddedIframeOpen ? `
-        <div class="mt-2 rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950 flex flex-col">
-          <div class="bg-slate-900/90 px-3 py-2 flex items-center justify-between border-b border-white/10 text-xs">
-            <span class="text-slate-300 font-semibold flex items-center gap-1.5">
-              <i data-lucide="smartphone" class="w-3.5 h-3.5 text-cyan-400"></i>
-              Bảng Điều Khiển Auto FB (Trực Tiếp)
-            </span>
-            <button onclick="toggleEmbedAutoFb()" class="text-slate-400 hover:text-white text-xs font-bold px-2 py-0.5 rounded bg-slate-800">
-              Đóng ✕
+          <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/5 w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-cyan-400 font-semibold">
+              <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
+              <span>Các bước kết nối:</span>
+            </div>
+            <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px] pl-1">
+              <li>Mở máy tính Laptop của bạn.</li>
+              <li>Chạy shortcut hoặc file <strong class="text-white">Auto_Post_FB</strong> trên màn hình.</li>
+              <li>Sau 3-5 giây, tab này sẽ <strong class="text-emerald-400">tự động hiển thị màn hình điều khiển</strong> trực tiếp!</li>
+            </ol>
+          </div>
+
+          <div class="flex items-center gap-2 mt-1">
+            <button 
+              id="btnRefreshAutoFbState"
+              onclick="checkTunnelStatusDirectly(true)" 
+              class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition active:scale-95 border border-white/10"
+            >
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Bấm kiểm tra kết nối lại ngay</span>
             </button>
           </div>
-          <iframe 
-            src="${targetMobileUrl}" 
-            class="w-full h-[620px] border-0 bg-slate-950"
-            title="Auto Facebook Remote Dashboard"
-          ></iframe>
         </div>
-        ` : ''}
-      </div>
-    `;
-  } else {
+      `;
+    }
+  } catch (err) {
+    console.error('[AutoFB] renderAutoFbView error:', err);
     container.innerHTML = `
-      <div class="bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-3">
-        <div class="w-16 h-16 rounded-2xl bg-slate-800/80 border border-white/5 flex items-center justify-center text-slate-400 mb-1">
-          <i data-lucide="laptop" class="w-8 h-8 text-slate-500"></i>
-        </div>
-        <div class="flex items-center gap-2">
-          <h3 class="text-base font-bold text-slate-200">Laptop Hiện Đang Tắt hoặc Chưa Mở Tool</h3>
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold border border-slate-700">○ OFFLINE</span>
-        </div>
-        <p class="text-xs text-slate-400 max-w-sm leading-relaxed">
-          Kịch bản Auto Facebook chỉ chạy khi máy tính của bạn đang mở tool. Hãy mở shortcut <strong>Auto Post FB</strong> trên màn hình Laptop, tab này sẽ <strong class="text-cyan-400">tự động chuyển sang ONLINE trong 3-5 giây</strong>!
-        </p>
-
-        <div class="bg-slate-950/80 rounded-xl p-3 border border-white/5 w-full max-w-sm text-left text-xs text-slate-300 flex flex-col gap-1.5 mt-2">
-          <div class="flex items-center gap-2 text-emerald-400 font-semibold">
-            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-            <span>Checklist & Bảng Tính (Sheets) vẫn dùng 24/7 bình thường</span>
-          </div>
-          <div class="text-[11px] text-slate-400 pl-6">
-            Bạn có thể chuyển sang tab <strong>Checklist</strong> hoặc <strong>Bảng Tính</strong> để làm việc trên điện thoại bất cứ lúc nào!
-          </div>
-        </div>
-
-        <button 
-          id="btnRefreshAutoFbState"
-          onclick="checkTunnelStatusDirectly(true)" 
-          class="mt-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 border border-white/10"
-        >
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-          <span>Bấm kiểm tra kết nối lại ngay</span>
+      <div class="bg-slate-900 rounded-2xl p-6 border border-rose-500/30 text-center flex flex-col items-center gap-3">
+        <div class="text-rose-400 text-sm font-semibold">Đã xảy ra lỗi khi tải giao diện Auto FB</div>
+        <p class="text-xs text-slate-400">${escapeHtml(err.message)}</p>
+        <button onclick="renderAutoFbView()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold">
+          Thử tải lại giao diện
         </button>
       </div>
     `;
+  } finally {
+    lucide.createIcons();
   }
-
-  lucide.createIcons();
 }
 
 // ==========================================
 // 8.1 SHEET UI RENDERERS & EVENT HANDLERS
 // ==========================================
-function renderSheetsView() {
-  if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
-    const countEl = document.getElementById('sheetRowCountText');
-    if (countEl) countEl.textContent = 'Chưa có dữ liệu trang tính';
-    return;
-  }
-
-  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
-  if (!activeSheet) return;
-  sheetsData.activeSheetId = activeSheet.id;
-
-  // 1. Render Sheet Tabs
-  const tabsContainer = document.getElementById('sheetTabsList');
-  if (tabsContainer) {
-    tabsContainer.innerHTML = sheetsData.sheets.map(sheet => {
-      const isActive = sheet.id === activeSheet.id;
-      const count = Array.isArray(sheet.rows) ? sheet.rows.length : 0;
-      const activeClass = 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-950/40 border-emerald-500';
-      const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/5';
-
-      return `
-        <button 
-          onclick="selectSheetTab('${sheet.id}')"
-          class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition active:scale-95 ${isActive ? activeClass : inactiveClass}"
-        >
-          <span>${sheet.icon || '📄'}</span>
-          <span>${escapeHtml(sheet.name)}</span>
-          <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
-        </button>
-      `;
-    }).join('');
-  }
-
-  // 2. Render Headers
-  const thead = document.getElementById('sheetTableHead');
-  if (thead) {
-    thead.innerHTML = `
-      <tr>
-        <th class="p-2.5 text-center w-12">#</th>
-        <th class="p-2.5">Tên / Nhãn</th>
-        <th class="p-2.5">Tài Khoản / Username</th>
-        <th class="p-2.5">Mật Khẩu</th>
-        <th class="p-2.5">Mail Khôi Phục / SĐT</th>
-        <th class="p-2.5 text-center">Trạng Thái</th>
-        <th class="p-2.5">Ghi Chú</th>
-        <th class="p-2.5 text-center w-20">Thao Tác</th>
-      </tr>
-    `;
-  }
-
-  // 3. Filter & Render Rows
+async function loadAndRenderSheetsTab() {
+  const countEl = document.getElementById('sheetRowCountText');
   const tbody = document.getElementById('sheetTableBody');
-  const rows = Array.isArray(activeSheet.rows) ? activeSheet.rows : [];
-  const q = (sheetSearchQuery || '').toLowerCase().trim();
 
-  const filteredRows = rows.filter(r => {
-    if (!q) return true;
-    return (
-      (r.label || '').toLowerCase().includes(q) ||
-      (r.username || '').toLowerCase().includes(q) ||
-      (r.recovery || '').toLowerCase().includes(q) ||
-      (r.status || '').toLowerCase().includes(q) ||
-      (r.note || '').toLowerCase().includes(q)
-    );
-  });
+  if (countEl) {
+    countEl.innerHTML = '<span class="inline-flex items-center gap-1.5 text-cyan-400 font-medium"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Đang tải dữ liệu mới nhất từ Cloud...</span>';
+  }
+  if (tbody && (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0)) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs"><div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-6 h-6 animate-spin text-cyan-400"></i><span>Đang nạp dữ liệu mới nhất từ Laptop / Cloud...</span></div></td></tr>';
+  }
+  lucide.createIcons();
 
-  if (tbody) {
-    if (filteredRows.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="8" class="text-center py-8 text-slate-500 text-xs">
-            ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "+ Thêm Dòng" để tạo.'}
-          </td>
-        </tr>
-      `;
-    } else {
-      tbody.innerHTML = filteredRows.map((r, idx) => {
-        const isPwVisible = visiblePasswords.has(r.id);
-        const pwDisplay = r.password ? (isPwVisible ? escapeHtml(r.password) : '••••••••') : '<span class="text-slate-600 italic">Trống</span>';
-        
-        let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">${escapeHtml(r.status || 'Live')}</span>`;
-        if (r.status === 'Live') {
-          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Live</span>`;
-        } else if (r.status === 'Die') {
-          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">🔴 Die</span>`;
-        } else if (r.status === 'Sai Pass') {
-          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">🟡 Sai Pass</span>`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+  try {
+    const gistId = cloudConfig.gistId || PRESET_GIST_ID;
+    const token = cloudConfig.token || PRESET_TOKEN;
+
+    if (!gistId || !navigator.onLine) {
+      throw new Error('Thiết bị đang offline hoặc chưa kết nối Cloud');
+    }
+
+    const headers = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+
+    const res = await fetch(`https://api.github.com/gists/${gistId}?_t=${Date.now()}`, {
+      headers,
+      signal: controller.signal
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.files && data.files['sheets_data.json'] && data.files['sheets_data.json'].content) {
+        const parsed = JSON.parse(data.files['sheets_data.json'].content);
+        if (parsed && Array.isArray(parsed.sheets)) {
+          sheetsData = parsed;
+          saveLocalSheetsData();
         }
+      }
+      if (data.files && data.files['tunnel_status.json'] && data.files['tunnel_status.json'].content) {
+        try {
+          const parsedTun = JSON.parse(data.files['tunnel_status.json'].content);
+          if (parsedTun && typeof parsedTun === 'object') {
+            const cleanUrl = parsedTun.tunnel_url || parsedTun.mobileUrl || (parsedTun.publicUrl ? `${parsedTun.publicUrl.replace(/\/$/, '')}/?pin=${parsedTun.pin || '686868'}&mobile=1` : '');
+            tunnelStatus = {
+              ...tunnelStatus,
+              ...parsedTun,
+              tunnel_url: cleanUrl || parsedTun.tunnel_url || parsedTun.publicUrl || ''
+            };
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    console.warn('[Sheets] Cloud fetch failed/timed out:', err.message);
+    if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
+      const localRaw = localStorage.getItem(STORAGE_KEY_SHEETS);
+      if (localRaw) {
+        try {
+          const parsed = JSON.parse(localRaw);
+          if (parsed && Array.isArray(parsed.sheets)) {
+            sheetsData = parsed;
+          }
+        } catch (_) {}
+      }
+    }
+    if (err.name === 'AbortError') {
+      showToast('Đã hết thời gian chờ Cloud (6s). Đang hiển thị dữ liệu lưu trên máy!', 'info');
+    } else if (!navigator.onLine) {
+      showToast('Đang offline. Hiển thị dữ liệu trang tính lưu trên máy!', 'info');
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    renderSheetsView();
+  }
+}
+
+function renderSheetsView() {
+  try {
+    if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
+      const countEl = document.getElementById('sheetRowCountText');
+      if (countEl) countEl.textContent = 'Chưa có dữ liệu trang tính';
+      const tbody = document.getElementById('sheetTableBody');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-500 text-xs">Chưa có dữ liệu trang tính. Bấm "+ Thêm Sheet" để bắt đầu.</td></tr>';
+      }
+      return;
+    }
+
+    const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+    if (!activeSheet) return;
+    sheetsData.activeSheetId = activeSheet.id;
+
+    // 1. Render Sheet Tabs
+    const tabsContainer = document.getElementById('sheetTabsList');
+    if (tabsContainer) {
+      tabsContainer.innerHTML = sheetsData.sheets.map(sheet => {
+        const isActive = sheet.id === activeSheet.id;
+        const count = Array.isArray(sheet.rows) ? sheet.rows.length : 0;
+        const activeClass = 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-950/40 border-emerald-500';
+        const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/5';
 
         return `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="p-2.5 text-center text-slate-500 font-mono text-[11px]">${idx + 1}</td>
-            <td class="p-2.5 font-medium text-slate-200">
-              <div class="max-w-[160px] truncate" title="${escapeHtml(r.label || '')}">${escapeHtml(r.label || '—')}</div>
-            </td>
-            <td class="p-2.5 font-mono text-[11px] text-emerald-300">
-              <div class="flex items-center gap-1.5 max-w-[200px]">
-                <span class="truncate" title="${escapeHtml(r.username || '')}">${escapeHtml(r.username || '—')}</span>
-                ${r.username ? `<button onclick="copySheetCellText('${escapeHtml(r.username)}', 'Tài khoản')" class="text-slate-400 hover:text-white p-1" title="Sao chép"><i data-lucide="copy" class="w-3 h-3"></i></button>` : ''}
-              </div>
-            </td>
-            <td class="p-2.5 font-mono text-[11px] text-slate-300">
-              <div class="flex items-center gap-1.5">
-                <span>${pwDisplay}</span>
-                ${r.password ? `
-                  <button onclick="togglePasswordVisibility('${r.id}')" class="text-slate-400 hover:text-white p-1" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
-                    <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
-                  </button>
-                  <button onclick="copySheetCellText('${escapeHtml(r.password)}', 'Mật khẩu')" class="text-slate-400 hover:text-white p-1" title="Sao chép">
-                    <i data-lucide="copy" class="w-3 h-3"></i>
-                  </button>
-                ` : ''}
-              </div>
-            </td>
-            <td class="p-2.5 text-slate-400 text-[11px]">
-              <div class="max-w-[160px] truncate" title="${escapeHtml(r.recovery || '')}">${escapeHtml(r.recovery || '—')}</div>
-            </td>
-            <td class="p-2.5 text-center">${statusBadge}</td>
-            <td class="p-2.5 text-slate-400 text-[11px]">
-              <div class="max-w-[180px] truncate" title="${escapeHtml(r.note || '')}">${escapeHtml(r.note || '—')}</div>
-            </td>
-            <td class="p-2.5 text-center">
-              <div class="flex items-center justify-center gap-1">
-                <button onclick="editSheetRow('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
-                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-                </button>
-                <button onclick="deleteSheetRowConfirm('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
-                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
+          <button 
+            onclick="selectSheetTab('${sheet.id}')"
+            class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition active:scale-95 ${isActive ? activeClass : inactiveClass}"
+          >
+            <span>${sheet.icon || '📄'}</span>
+            <span>${escapeHtml(sheet.name)}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
+          </button>
         `;
       }).join('');
     }
-  }
 
-  // 4. Update count text
-  const countEl = document.getElementById('sheetRowCountText');
-  if (countEl) {
-    countEl.innerHTML = `Đang hiển thị <strong>${filteredRows.length}</strong> / <strong>${rows.length}</strong> dòng • Sheet: <strong>${escapeHtml(activeSheet.name)}</strong>`;
-  }
+    // 2. Render Headers
+    const thead = document.getElementById('sheetTableHead');
+    if (thead) {
+      thead.innerHTML = `
+        <tr>
+          <th class="p-2.5 text-center w-12">#</th>
+          <th class="p-2.5">Tên / Nhãn</th>
+          <th class="p-2.5">Tài Khoản / Username</th>
+          <th class="p-2.5">Mật Khẩu</th>
+          <th class="p-2.5">Mail Khôi Phục / SĐT</th>
+          <th class="p-2.5 text-center">Trạng Thái</th>
+          <th class="p-2.5">Ghi Chú</th>
+          <th class="p-2.5 text-center w-20">Thao Tác</th>
+        </tr>
+      `;
+    }
 
-  lucide.createIcons();
+    // 3. Filter & Render Rows
+    const tbody = document.getElementById('sheetTableBody');
+    const rows = Array.isArray(activeSheet.rows) ? activeSheet.rows : [];
+    const q = (sheetSearchQuery || '').toLowerCase().trim();
+
+    const filteredRows = rows.filter(r => {
+      if (!q) return true;
+      return (
+        (r.label || '').toLowerCase().includes(q) ||
+        (r.username || '').toLowerCase().includes(q) ||
+        (r.recovery || '').toLowerCase().includes(q) ||
+        (r.status || '').toLowerCase().includes(q) ||
+        (r.note || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (tbody) {
+      if (filteredRows.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-8 text-slate-500 text-xs">
+              ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "+ Thêm Dòng" để tạo.'}
+            </td>
+          </tr>
+        `;
+      } else {
+        tbody.innerHTML = filteredRows.map((r, idx) => {
+          const isPwVisible = visiblePasswords.has(r.id);
+          const pwDisplay = r.password ? (isPwVisible ? escapeHtml(r.password) : '••••••••') : '<span class="text-slate-600 italic">Trống</span>';
+          
+          let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">${escapeHtml(r.status || 'Live')}</span>`;
+          if (r.status === 'Live') {
+            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Live</span>`;
+          } else if (r.status === 'Die') {
+            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">🔴 Die</span>`;
+          } else if (r.status === 'Sai Pass') {
+            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">🟡 Sai Pass</span>`;
+          }
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="p-2.5 text-center text-slate-500 font-mono text-[11px]">${idx + 1}</td>
+              <td class="p-2.5 font-medium text-slate-200">
+                <div class="max-w-[160px] truncate" title="${escapeHtml(r.label || '')}">${escapeHtml(r.label || '—')}</div>
+              </td>
+              <td class="p-2.5 font-mono text-[11px] text-emerald-300">
+                <div class="flex items-center gap-1.5 max-w-[200px]">
+                  <span class="truncate" title="${escapeHtml(r.username || '')}">${escapeHtml(r.username || '—')}</span>
+                  ${r.username ? `<button onclick="copySheetCellText('${escapeHtml(r.username)}', 'Tài khoản')" class="text-slate-400 hover:text-white p-1" title="Sao chép"><i data-lucide="copy" class="w-3 h-3"></i></button>` : ''}
+                </div>
+              </td>
+              <td class="p-2.5 font-mono text-[11px] text-slate-300">
+                <div class="flex items-center gap-1.5">
+                  <span>${pwDisplay}</span>
+                  ${r.password ? `
+                    <button onclick="togglePasswordVisibility('${r.id}')" class="text-slate-400 hover:text-white p-1" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
+                      <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
+                    </button>
+                    <button onclick="copySheetCellText('${escapeHtml(r.password)}', 'Mật khẩu')" class="text-slate-400 hover:text-white p-1" title="Sao chép">
+                      <i data-lucide="copy" class="w-3 h-3"></i>
+                    </button>
+                  ` : ''}
+                </div>
+              </td>
+              <td class="p-2.5 text-slate-400 text-[11px]">
+                <div class="max-w-[160px] truncate" title="${escapeHtml(r.recovery || '')}">${escapeHtml(r.recovery || '—')}</div>
+              </td>
+              <td class="p-2.5 text-center">${statusBadge}</td>
+              <td class="p-2.5 text-slate-400 text-[11px]">
+                <div class="max-w-[180px] truncate" title="${escapeHtml(r.note || '')}">${escapeHtml(r.note || '—')}</div>
+              </td>
+              <td class="p-2.5 text-center">
+                <div class="flex items-center justify-center gap-1">
+                  <button onclick="editSheetRow('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
+                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button onclick="deleteSheetRowConfirm('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // 4. Update count text
+    const countEl = document.getElementById('sheetRowCountText');
+    if (countEl) {
+      countEl.innerHTML = `Đang hiển thị <strong>${filteredRows.length}</strong> / <strong>${rows.length}</strong> dòng • Sheet: <strong>${escapeHtml(activeSheet.name)}</strong>`;
+    }
+  } catch (err) {
+    console.error('[Sheets] renderSheetsView error:', err);
+    const countEl = document.getElementById('sheetRowCountText');
+    if (countEl) {
+      countEl.innerHTML = `<span class="text-rose-400 font-semibold">Lỗi hiển thị bảng tính: ${escapeHtml(err.message)}</span>`;
+    }
+    const tbody = document.getElementById('sheetTableBody');
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="text-center py-8 text-rose-400 text-xs">
+            <div class="flex flex-col items-center gap-2">
+              <p>Đã xảy ra lỗi khi tải dữ liệu bảng tính.</p>
+              <button onclick="loadAndRenderSheetsTab()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold">
+                Thử tải lại dữ liệu
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  } finally {
+    lucide.createIcons();
+  }
 }
 
 window.selectSheetTab = function(sheetId) {
@@ -2063,6 +2256,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   window.addEventListener('offline', () => {
     setSyncStatusUI('offline', 'Mất kết nối mạng');
+  });
+
+  // Mobile / Safari iOS Lifecycle: Flush pending sync immediately before app freeze or hide
+  const flushPendingSync = () => {
+    if (syncDebounceTimer) {
+      clearTimeout(syncDebounceTimer);
+      syncDebounceTimer = null;
+      pushCloudData(false, { keepalive: true });
+    }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushPendingSync();
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    flushPendingSync();
   });
 
   // 9. Initial Render
