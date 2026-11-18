@@ -1384,8 +1384,12 @@ function renderAutoFbView() {
   try {
     const pin = tunnelStatus.pin || '686868';
     const targetUrl = tunnelStatus.tunnel_url || tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
+    const isOnline = tunnelStatus.online !== false && !!targetUrl;
+    // Heartbeat check: nếu có updatedAt thì kiểm tra trong vòng 5 phút (300,000ms)
+    const isFresh = tunnelStatus.updatedAt ? (Date.now() - tunnelStatus.updatedAt < 300000) : true;
+    const isLaptopActive = isOnline && isFresh && !!targetUrl;
 
-    if (targetUrl) {
+    if (isLaptopActive) {
       container.innerHTML = `
         <div class="flex flex-col gap-2.5 w-full">
           <!-- Thanh công cụ phía trên iframe -->
@@ -1460,12 +1464,13 @@ function renderAutoFbView() {
           </div>
 
           <div class="flex items-center gap-2">
-            <h3 class="text-base font-bold text-slate-200">Đang chờ Laptop mở công cụ Auto FB</h3>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">○ CHỜ KẾT NỐI</span>
+            <h3 class="text-base font-bold text-slate-200">Laptop đang tắt / Tool FB chưa mở</h3>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-bold border border-slate-600">○ LAPTOP TẮT</span>
           </div>
 
           <p class="text-xs text-slate-300 max-w-md leading-relaxed">
-            Để điều khiển Facebook trực tiếp trên tab này, hãy mở file hoặc shortcut <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong> trên Laptop. Đường hầm bảo mật sẽ tự động kích hoạt và gửi liên kết kết nối lên Gist!
+            Hai tab <strong class="text-emerald-400">Checklist</strong> và <strong class="text-emerald-400">Bảng Tính</strong> vẫn đang hoạt động 24/7 bình thường.<br>
+            Khi bạn mở Laptop và chạy <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong>, tab này sẽ <strong class="text-cyan-400 font-semibold">tự động kết nối</strong> để bạn điều khiển từ xa!
           </p>
 
           <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/5 w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
