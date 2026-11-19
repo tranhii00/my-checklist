@@ -1250,23 +1250,32 @@ function update1ClickUrlField() {
   if (inputEl) inputEl.value = oneClickUrl;
 }
 
+const STORAGE_KEY_TUNNEL = 'my_checklist_tunnel_status';
+function loadStoredTunnelStatus() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TUNNEL);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+const storedTunnel = loadStoredTunnelStatus();
 let tunnelStatus = {
-  online: false,
-  laptopActive: false,
-  tunnel_url: '',
-  publicUrl: '',
-  mobileUrl: '',
-  lanMobileUrl: '',
-  lanUrl: '',
-  pin: '686868',
-  updatedAt: 0
+  online: storedTunnel?.online ?? false,
+  laptopActive: storedTunnel?.laptopActive ?? false,
+  tunnel_url: storedTunnel?.tunnel_url || '',
+  publicUrl: storedTunnel?.publicUrl || '',
+  mobileUrl: storedTunnel?.mobileUrl || '',
+  lanMobileUrl: storedTunnel?.lanMobileUrl || '',
+  lanUrl: storedTunnel?.lanUrl || '',
+  pin: storedTunnel?.pin || '686868',
+  updatedAt: storedTunnel?.updatedAt || 0
 };
 
 let autofbPollTimer = null;
 
 async function checkTunnelStatusDirectly(manual = false) {
   const btnRefresh = document.getElementById('btnRefreshAutoFbState');
-  if (btnRefresh) {
+  if (btnRefresh && manual) {
     const icon = btnRefresh.querySelector('i');
     if (icon) icon.classList.add('animate-spin');
   }
@@ -1287,12 +1296,21 @@ async function checkTunnelStatusDirectly(manual = false) {
         const parsed = JSON.parse(data.files['tunnel_status.json'].content);
         if (parsed && typeof parsed === 'object') {
           const cleanUrl = parsed.tunnel_url || parsed.mobileUrl || (parsed.publicUrl ? `${parsed.publicUrl.replace(/\/$/, '')}/?pin=${parsed.pin || '686868'}&mobile=1` : '');
+          const prevOnline = tunnelStatus.online;
+          const prevUrl = tunnelStatus.tunnel_url;
+          
           tunnelStatus = {
             ...tunnelStatus,
             ...parsed,
             tunnel_url: cleanUrl || parsed.tunnel_url || parsed.publicUrl || ''
           };
-          renderAutoFbView();
+          localStorage.setItem(STORAGE_KEY_TUNNEL, JSON.stringify(tunnelStatus));
+
+          // Only trigger UI update if state actually changed or manual refresh
+          if (prevOnline !== tunnelStatus.online || prevUrl !== tunnelStatus.tunnel_url || manual) {
+            renderAutoFbView();
+          }
+
           if (manual) {
             showToast(tunnelStatus.online ? 'Đã kết nối thành công với Laptop!' : 'Đã kiểm tra: Laptop hiện đang tắt.', tunnelStatus.online ? 'success' : 'info');
           }
@@ -1303,11 +1321,10 @@ async function checkTunnelStatusDirectly(manual = false) {
     console.warn('[AutoFB] Check tunnel status error:', err);
     if (manual) showToast('Lỗi kiểm tra kết nối: ' + err.message, 'error');
   } finally {
-    if (btnRefresh) {
+    if (btnRefresh && manual) {
       const icon = btnRefresh.querySelector('i');
       if (icon) icon.classList.remove('animate-spin');
     }
-    lucide.createIcons();
   }
 }
 
@@ -1360,11 +1377,12 @@ function switchTab(tabName) {
     renderAutoFbView();
     checkTunnelStatusDirectly(false);
     if (autofbPollTimer) clearInterval(autofbPollTimer);
+    // Poll smoothly every 25s without destructive DOM churn
     autofbPollTimer = setInterval(() => {
       if (currentActiveTab === 'autofb') {
         checkTunnelStatusDirectly(false);
       }
-    }, 7000);
+    }, 25000);
   } else if (tabName === 'history') {
     if (viewHistory) viewHistory.classList.remove('hidden');
     if (tabBtnHistory) tabBtnHistory.className = activeClass;
@@ -1386,131 +1404,151 @@ function renderAutoFbView() {
     const targetUrl = tunnelStatus.tunnel_url || tunnelStatus.mobileUrl || (tunnelStatus.publicUrl ? `${tunnelStatus.publicUrl.replace(/\/$/, '')}/?pin=${pin}&mobile=1` : '');
     const isOnline = tunnelStatus.online !== false && !!targetUrl;
     // Heartbeat check: nếu có updatedAt thì kiểm tra trong vòng 5 phút (300,000ms)
-    const isFresh = tunnelStatus.updatedAt ? (Date.now() - tunnelStatus.updatedAt < 300000) : true;
+    const isFresh = (tunnelStatus.updatedAt > 0) ? (Date.now() - tunnelStatus.updatedAt < 300000) : isOnline;
     const isLaptopActive = isOnline && isFresh && !!targetUrl;
 
-    if (isLaptopActive) {
+    // 1. Build persistent non-destructive skeleton if not yet built
+    let wrapper = document.getElementById('autoFbWrapper');
+    let existingIframe = document.getElementById('autoFbIframe');
+    if (!wrapper || !existingIframe) {
       container.innerHTML = `
-        <div class="flex flex-col gap-2.5 w-full">
-          <!-- Thanh công cụ phía trên iframe -->
-          <div class="bg-slate-900/90 rounded-2xl p-2.5 sm:p-3 border border-emerald-500/30 shadow-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div class="flex items-center gap-2.5">
-              <span class="relative flex h-3 w-3">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-              </span>
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-white text-xs sm:text-sm">Laptop Online (Đã kết nối)</span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+        <div id="autoFbWrapper" class="flex flex-col gap-2.5 w-full">
+          <!-- SECTION 1: ONLINE (TOOLBAR + IFRAME) -->
+          <div id="autoFbOnlineSection" class="${isLaptopActive ? '' : 'hidden'} flex flex-col gap-2.5 w-full">
+            <div class="bg-slate-900/90 rounded-2xl p-2.5 sm:p-3 border border-emerald-500/30 shadow-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-2.5">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white text-xs sm:text-sm">Laptop Online (Đã kết nối)</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400">Giao diện điều khiển Auto Facebook từ xa</p>
                 </div>
-                <p class="text-[11px] text-slate-400">Giao diện điều khiển Auto Facebook từ xa</p>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button 
+                  type="button"
+                  onclick="reloadAutoFbIframe()" 
+                  class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition active:scale-95" 
+                  title="Nạp lại bảng điều khiển"
+                >
+                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  <span>Nạp lại</span>
+                </button>
+
+                <a 
+                  id="btnAutoFbFullscreen"
+                  href="${escapeHtml(targetUrl)}" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold flex items-center gap-1.5 text-xs transition shadow-md shadow-emerald-950/40 active:scale-95"
+                  title="Mở tab mới toàn màn hình"
+                >
+                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                  <span>Toàn màn hình</span>
+                </a>
+
+                <button 
+                  type="button"
+                  id="btnRefreshAutoFbState"
+                  onclick="checkTunnelStatusDirectly(true)" 
+                  class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition active:scale-95 border border-white/5" 
+                  title="Kiểm tra lại kết nối"
+                >
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                </button>
               </div>
             </div>
 
-            <div class="flex items-center gap-1.5">
+            <!-- Khung nhúng iframe với chiều cao cố định chống giật Safari iOS -->
+            <div class="relative w-full rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950" style="height: 72vh; height: 72dvh; min-height: 480px; contain: paint;">
+              <iframe 
+                id="autoFbIframe"
+                src="${isLaptopActive && targetUrl ? escapeHtml(targetUrl) : ''}" 
+                class="w-full h-full border-0 bg-slate-950 block"
+                allow="clipboard-read; clipboard-write; fullscreen"
+                sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
+                title="Bảng Điều Khiển Auto Facebook"
+              ></iframe>
+            </div>
+          </div>
+
+          <!-- SECTION 2: OFFLINE (THÔNG BÁO LAPTOP TẮT) -->
+          <div id="autoFbOfflineSection" class="${isLaptopActive ? 'hidden' : ''} bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-4">
+            <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
+              <i data-lucide="laptop" class="w-8 h-8 text-amber-400"></i>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-slate-200">Laptop đang tắt / Tool FB chưa mở</h3>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-bold border border-slate-600">○ LAPTOP TẮT</span>
+            </div>
+
+            <p class="text-xs text-slate-300 max-w-md leading-relaxed">
+              Hai tab <strong class="text-emerald-400">Checklist</strong> và <strong class="text-emerald-400">Bảng Tính</strong> vẫn đang hoạt động 24/7 bình thường.<br>
+              Khi bạn mở Laptop và chạy <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong>, tab này sẽ <strong class="text-cyan-400 font-semibold">tự động kết nối</strong> để bạn điều khiển từ xa!
+            </p>
+
+            <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/5 w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
+              <div class="flex items-center gap-2 text-cyan-400 font-semibold">
+                <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
+                <span>Các bước kết nối:</span>
+              </div>
+              <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px] pl-1">
+                <li>Mở máy tính Laptop của bạn.</li>
+                <li>Chạy shortcut hoặc file <strong class="text-white">Auto_Post_FB</strong> trên màn hình.</li>
+                <li>Sau vài giây, tab này sẽ <strong class="text-emerald-400">tự động hiển thị màn hình điều khiển</strong>!</li>
+              </ol>
+            </div>
+
+            <div class="flex items-center gap-2 mt-1">
               <button 
                 type="button"
-                onclick="reloadAutoFbIframe()" 
-                class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition active:scale-95" 
-                title="Nạp lại bảng điều khiển"
-              >
-                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
-                <span>Nạp lại</span>
-              </button>
-
-              <a 
-                href="${escapeHtml(targetUrl)}" 
-                target="_blank" 
-                rel="noreferrer" 
-                class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold flex items-center gap-1.5 text-xs transition shadow-md shadow-emerald-950/40 active:scale-95"
-                title="Mở tab mới toàn màn hình"
-              >
-                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-                <span>Mở toàn màn hình</span>
-              </a>
-
-              <button 
-                type="button"
-                id="btnRefreshAutoFbState"
                 onclick="checkTunnelStatusDirectly(true)" 
-                class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition active:scale-95 border border-white/5" 
-                title="Kiểm tra lại kết nối"
+                class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition active:scale-95 border border-white/10"
               >
                 <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Bấm kiểm tra kết nối lại ngay</span>
               </button>
             </div>
           </div>
-
-          <!-- Nhúng trực tiếp iframe giao diện điều khiển FB -->
-          <div class="relative w-full rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950 flex flex-col">
-            <iframe 
-              id="autoFbIframe"
-              src="${escapeHtml(targetUrl)}" 
-              class="w-full border-0 bg-slate-950 block"
-              style="height: calc(100dvh - 180px); min-height: 480px;"
-              allow="clipboard-read; clipboard-write; fullscreen"
-              sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
-              title="Bảng Điều Khiển Auto Facebook"
-            ></iframe>
-          </div>
         </div>
       `;
+      lucide.createIcons();
+      return;
+    }
+
+    // 2. Persistent update: toggle classes & sync iframe src without destroying DOM
+    const onlineSection = document.getElementById('autoFbOnlineSection');
+    const offlineSection = document.getElementById('autoFbOfflineSection');
+    const iframe = document.getElementById('autoFbIframe');
+    const btnFullscreen = document.getElementById('btnAutoFbFullscreen');
+
+    if (btnFullscreen && targetUrl) {
+      btnFullscreen.href = targetUrl;
+    }
+
+    if (isLaptopActive) {
+      if (onlineSection) onlineSection.classList.remove('hidden');
+      if (offlineSection) offlineSection.classList.add('hidden');
+      if (iframe && targetUrl) {
+        // ONLY update src if empty or target origin changed (never re-trigger reload if already loaded!)
+        const targetClean = targetUrl.split('?')[0];
+        if (!iframe.src || iframe.src === 'about:blank' || !iframe.src.includes(targetClean)) {
+          iframe.src = targetUrl;
+        }
+      }
     } else {
-      container.innerHTML = `
-        <div class="bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-4">
-          <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
-            <i data-lucide="laptop" class="w-8 h-8 text-amber-400"></i>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <h3 class="text-base font-bold text-slate-200">Laptop đang tắt / Tool FB chưa mở</h3>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-bold border border-slate-600">○ LAPTOP TẮT</span>
-          </div>
-
-          <p class="text-xs text-slate-300 max-w-md leading-relaxed">
-            Hai tab <strong class="text-emerald-400">Checklist</strong> và <strong class="text-emerald-400">Bảng Tính</strong> vẫn đang hoạt động 24/7 bình thường.<br>
-            Khi bạn mở Laptop và chạy <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong>, tab này sẽ <strong class="text-cyan-400 font-semibold">tự động kết nối</strong> để bạn điều khiển từ xa!
-          </p>
-
-          <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/5 w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
-            <div class="flex items-center gap-2 text-cyan-400 font-semibold">
-              <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
-              <span>Các bước kết nối:</span>
-            </div>
-            <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px] pl-1">
-              <li>Mở máy tính Laptop của bạn.</li>
-              <li>Chạy shortcut hoặc file <strong class="text-white">Auto_Post_FB</strong> trên màn hình.</li>
-              <li>Sau 3-5 giây, tab này sẽ <strong class="text-emerald-400">tự động hiển thị màn hình điều khiển</strong> trực tiếp!</li>
-            </ol>
-          </div>
-
-          <div class="flex items-center gap-2 mt-1">
-            <button 
-              id="btnRefreshAutoFbState"
-              onclick="checkTunnelStatusDirectly(true)" 
-              class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition active:scale-95 border border-white/10"
-            >
-              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-              <span>Bấm kiểm tra kết nối lại ngay</span>
-            </button>
-          </div>
-        </div>
-      `;
+      if (onlineSection) onlineSection.classList.add('hidden');
+      if (offlineSection) offlineSection.classList.remove('hidden');
     }
   } catch (err) {
     console.error('[AutoFB] renderAutoFbView error:', err);
-    container.innerHTML = `
-      <div class="bg-slate-900 rounded-2xl p-6 border border-rose-500/30 text-center flex flex-col items-center gap-3">
-        <div class="text-rose-400 text-sm font-semibold">Đã xảy ra lỗi khi tải giao diện Auto FB</div>
-        <p class="text-xs text-slate-400">${escapeHtml(err.message)}</p>
-        <button onclick="renderAutoFbView()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold">
-          Thử tải lại giao diện
-        </button>
-      </div>
-    `;
-  } finally {
-    lucide.createIcons();
   }
 }
 
