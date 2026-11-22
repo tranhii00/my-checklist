@@ -25,10 +25,23 @@ function safeParseDate(input) {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
+function refreshIcons() {
+  try {
+    if (window.lucide?.createIcons) {
+      lucide.createIcons();
+    }
+  } catch (_) {}
+}
+
+function getTaskDate(t) {
+  return (t && (t.date || t.dateKey)) || '';
+}
+
 if (typeof window !== 'undefined') {
   window.safeEscapeHtml = safeEscapeHtml;
   window.escapeHtml = safeEscapeHtml;
   window.safeParseDate = safeParseDate;
+  window.refreshIcons = refreshIcons;
 }
 
 // ==========================================
@@ -69,6 +82,19 @@ let syncDebounceTimer = null;
 let isSyncing = false;
 let showCompletedList = true;
 
+let checklistViewMode = 'day'; // 'day' | 'all'
+let allFilterStatus = 'all';   // 'all' | 'pending' | 'overdue' | 'completed'
+let allTimeRange = 'all';      // 'all' | 'past' | 'upcoming' | '7d' | '30d'
+let allSearchQuery = '';
+let allSortOrder = 'desc';     // 'desc' | 'asc'
+let historyMonthFilter = 'all';
+let historySearchQuery = '';
+const collapsedAllDates = new Set();
+
+let allSearchDebounceTimer = null;
+let historySearchDebounceTimer = null;
+let sheetSearchDebounceTimer = null;
+
 // ==========================================
 // 2. DATE UTILITIES (VIETNAMESE LOCALIZED)
 // ==========================================
@@ -81,8 +107,22 @@ function getTodayDateStr() {
 }
 
 function parseDateStr(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string' || !dateStr.includes('-')) {
+    return new Date();
+  }
   const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return new Date();
   return new Date(y, m - 1, d);
+}
+
+function diffDaysBetween(dateStrA, dateStrB) {
+  if (!dateStrA || !dateStrB) return 0;
+  const [yA, mA, dA] = String(dateStrA).split('-').map(Number);
+  const [yB, mB, dB] = String(dateStrB).split('-').map(Number);
+  if (!yA || !mA || !dA || !yB || !mB || !dB) return 0;
+  const utcA = Date.UTC(yA, mA - 1, dA);
+  const utcB = Date.UTC(yB, mB - 1, dB);
+  return Math.round((utcA - utcB) / 86400000);
 }
 
 function formatDateToStr(dateObj) {
@@ -100,6 +140,11 @@ function addDaysToDateStr(dateStr, days) {
 
 function getVietnameseDayOfWeek(dateObj) {
   const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  return days[dateObj.getDay()];
+}
+
+function getShortVietnameseDayOfWeek(dateObj) {
+  const days = ['CN', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
   return days[dateObj.getDay()];
 }
 
@@ -312,6 +357,7 @@ function resetToDefaultData() {
 // 4.1 SHEETS DATA MANAGEMENT & STORAGE
 // ==========================================
 const STORAGE_KEY_SHEETS = 'my_sheets_data_v1';
+const STORAGE_KEY_SHEETS_DIRTY = 'my_sheets_dirty_v1';
 let currentActiveTab = 'checklist';
 let sheetsData = {
   activeSheetId: 'sheet_fb',
@@ -320,6 +366,51 @@ let sheetsData = {
 let sheetDebounceTimer = null;
 let sheetSearchQuery = '';
 const visiblePasswords = new Set();
+
+const DEFAULT_SHEET_COLUMNS = [
+  { id: 'label', name: 'Tên / Nhãn', width: 170, type: 'text' },
+  { id: 'username', name: 'Tài khoản / Mail', width: 230, type: 'copy_text' },
+  { id: 'password', name: 'Mật khẩu', width: 165, type: 'password' },
+  { id: 'recovery', name: 'Mail khôi phục / SĐT', width: 185, type: 'text' },
+  { id: 'status', name: 'Trạng thái', width: 120, type: 'status' },
+  { id: 'note', name: 'Ghi chú', width: 220, type: 'text' }
+];
+
+function getActiveSheet() {
+  if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
+    return null;
+  }
+  const found = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId);
+  if (found) return found;
+  sheetsData.activeSheetId = sheetsData.sheets[0].id;
+  return sheetsData.sheets[0];
+}
+
+function getResolvedColumns(activeSheet) {
+  if (activeSheet && Array.isArray(activeSheet.columns) && activeSheet.columns.length > 0) {
+    return activeSheet.columns;
+  }
+  return DEFAULT_SHEET_COLUMNS;
+}
+
+function shouldAdoptRemoteSheets(remoteSheets) {
+  if (!remoteSheets || !Array.isArray(remoteSheets.sheets)) return false;
+  if (sheetDebounceTimer) return false;
+
+  const localHasSheets = Array.isArray(sheetsData?.sheets) && sheetsData.sheets.length > 0;
+  if (!localHasSheets) return true;
+
+  const isLocalDirty = localStorage.getItem(STORAGE_KEY_SHEETS_DIRTY) === '1';
+  const localTs = Number(sheetsData?.updatedAt || 0);
+  const remoteTs = Number(remoteSheets?.updatedAt || 0);
+
+  if (localTs > 0 && remoteTs > 0) {
+    if (localTs > remoteTs) return false;
+    return true;
+  }
+  if (isLocalDirty) return false;
+  return true;
+}
 
 async function loadLocalSheetsData() {
   const localRaw = localStorage.getItem(STORAGE_KEY_SHEETS);
@@ -335,14 +426,14 @@ async function loadLocalSheetsData() {
     }
   }
 
-  // Fallback: fetch bundled sheets_data.json
+  // Fallback: fetch bundled sheets_data.json without bumping updatedAt above cloud
   try {
     const res = await fetch('./sheets_data.json');
     if (res.ok) {
       const initSheets = await res.json();
       if (initSheets && Array.isArray(initSheets.sheets)) {
         sheetsData = initSheets;
-        saveLocalSheetsData();
+        saveLocalSheetsData(false);
       }
     }
   } catch (err) {
@@ -350,27 +441,35 @@ async function loadLocalSheetsData() {
   }
 }
 
-function saveLocalSheetsData() {
-  sheetsData.updatedAt = Date.now();
+function saveLocalSheetsData(touchTimestamp = true) {
+  if (touchTimestamp) {
+    sheetsData.updatedAt = Date.now();
+  }
   localStorage.setItem(STORAGE_KEY_SHEETS, JSON.stringify(sheetsData));
 }
 
 function triggerCloudSheetsSync() {
-  saveLocalSheetsData();
+  saveLocalSheetsData(true);
+  localStorage.setItem(STORAGE_KEY_SHEETS_DIRTY, '1');
   if (!cloudConfig.autoSync) return;
   if (sheetDebounceTimer) clearTimeout(sheetDebounceTimer);
   setSyncStatusUI('syncing', 'Đang lưu Sheet lên Cloud...');
   sheetDebounceTimer = setTimeout(() => {
+    sheetDebounceTimer = null;
     pushCloudSheetsData(false);
   }, 1200);
 }
 
-async function pushCloudSheetsData(isManual = false) {
+async function pushCloudSheetsData(isManual = false, options = {}) {
   if (!navigator.onLine) {
     setSyncStatusUI('offline', 'Offline: Đã lưu Sheet trên điện thoại');
     return;
   }
   if (!cloudConfig.gistId || !cloudConfig.token) return;
+
+  if (!sheetsData.updatedAt) {
+    sheetsData.updatedAt = Date.now();
+  }
 
   const btnSpin = document.getElementById('iconSaveSheetSpin');
   if (btnSpin) btnSpin.classList.add('animate-spin');
@@ -385,7 +484,7 @@ async function pushCloudSheetsData(isManual = false) {
         }
       }
     };
-    const res = await fetch(`https://api.github.com/gists/${cloudConfig.gistId}`, {
+    const fetchConfig = {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${cloudConfig.token}`,
@@ -393,10 +492,15 @@ async function pushCloudSheetsData(isManual = false) {
         'Accept': 'application/vnd.github.v3+json'
       },
       body: JSON.stringify(payload)
-    });
+    };
+    if (options && options.keepalive) {
+      fetchConfig.keepalive = true;
+    }
+    const res = await fetch(`https://api.github.com/gists/${cloudConfig.gistId}`, fetchConfig);
     if (!res.ok) {
       throw new Error(`Cloud update error ${res.status}`);
     }
+    localStorage.removeItem(STORAGE_KEY_SHEETS_DIRTY);
     setSyncStatusUI('synced', 'Đã lưu Sheet lên Đám mây');
     if (isManual) showToast('Đã lưu dữ liệu Sheet lên Cloud 24/7!', 'success');
   } catch (e) {
@@ -488,14 +592,20 @@ async function fetchCloudData(isManual = false) {
     }
 
     // Sync Sheets Data if present in Gist
+    let needSheetsPush = false;
     if (gistData.files && gistData.files['sheets_data.json'] && gistData.files['sheets_data.json'].content) {
       try {
         const remoteSheets = JSON.parse(gistData.files['sheets_data.json'].content);
         if (remoteSheets && Array.isArray(remoteSheets.sheets)) {
-          sheetsData = remoteSheets;
-          saveLocalSheetsData();
-          if (currentActiveTab === 'sheets') {
-            renderSheetsView();
+          if (shouldAdoptRemoteSheets(remoteSheets)) {
+            sheetsData = remoteSheets;
+            saveLocalSheetsData(false);
+            localStorage.removeItem(STORAGE_KEY_SHEETS_DIRTY);
+            if (currentActiveTab === 'sheets') {
+              renderSheetsView();
+            }
+          } else if (!sheetDebounceTimer) {
+            needSheetsPush = true;
           }
         }
       } catch (sheetsErr) {
@@ -523,6 +633,7 @@ async function fetchCloudData(isManual = false) {
       }
     }
 
+    let triggeredFullPush = false;
     if (cloudContent) {
       try {
         const remoteData = JSON.parse(cloudContent);
@@ -576,17 +687,24 @@ async function fetchCloudData(isManual = false) {
           }
         }
         if (hasLocalNewer || mergedList.length > remoteTasks.length) {
+          triggeredFullPush = true;
           pushCloudData(false);
         }
         setSyncStatusUI('synced', 'Đã đồng bộ');
         if (isManual) showToast('Đã tải và cập nhật dữ liệu mới nhất!', 'success');
       } catch (parseErr) {
         console.warn('Could not parse cloud JSON, uploading local data...');
+        triggeredFullPush = true;
         pushCloudData(false);
       }
     } else {
       // Empty gist, upload local
+      triggeredFullPush = true;
       pushCloudData(false);
+    }
+
+    if (needSheetsPush && !triggeredFullPush) {
+      pushCloudSheetsData(false);
     }
   } catch (err) {
     console.error('Fetch cloud error:', err);
@@ -611,16 +729,21 @@ async function pushCloudData(isManual = false, options = {}) {
     setSyncStatusUI('syncing');
     isSyncing = true;
 
+    const filesPayload = {
+      'checklist_data.json': {
+        content: JSON.stringify(appData, null, 2)
+      }
+    };
+    if (sheetsData && Array.isArray(sheetsData.sheets) && sheetsData.sheets.length > 0) {
+      if (!sheetsData.updatedAt) sheetsData.updatedAt = Date.now();
+      filesPayload['sheets_data.json'] = {
+        content: JSON.stringify(sheetsData, null, 2)
+      };
+    }
+
     const payload = {
       description: 'Personal Daily Checklist & Sheet Manager 24/7 Cloud Sync Data',
-      files: {
-        'checklist_data.json': {
-          content: JSON.stringify(appData, null, 2)
-        },
-        'sheets_data.json': {
-          content: JSON.stringify(sheetsData, null, 2)
-        }
-      }
+      files: filesPayload
     };
 
     const fetchConfig = {
@@ -643,6 +766,9 @@ async function pushCloudData(isManual = false, options = {}) {
       throw new Error(`GitHub Gist Update failed: ${res.status}`);
     }
 
+    if (filesPayload['sheets_data.json']) {
+      localStorage.removeItem(STORAGE_KEY_SHEETS_DIRTY);
+    }
     setSyncStatusUI('synced', 'Đã lưu lên Đám mây');
     if (isManual) showToast('Đã đẩy dữ liệu lên Đám mây thành công!', 'success');
   } catch (err) {
@@ -724,7 +850,7 @@ function moveTaskToTomorrow(taskId) {
   if (!task) return;
 
   const now = Date.now();
-  const currentTaskDate = task.date || selectedDate;
+  const currentTaskDate = getTaskDate(task) || selectedDate;
   const tomorrowDateStr = addDaysToDateStr(currentTaskDate, 1);
   task.date = tomorrowDateStr;
   task.dateKey = tomorrowDateStr;
@@ -739,8 +865,25 @@ function moveTaskToTomorrow(taskId) {
   triggerCloudSync();
 }
 
+function moveTaskToToday(taskId) {
+  const task = appData.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  const today = getTodayDateStr();
+  const now = Date.now();
+  task.date = today;
+  task.dateKey = today;
+  task.updatedAt = now;
+  appData.updatedAt = now;
+
+  showToast(`Đã dời việc về hôm nay (${formatShortVNDate(today)})!`, 'success');
+  saveLocalData();
+  renderApp();
+  triggerCloudSync();
+}
+
 function moveAllPendingToTomorrow() {
-  const pendingTasks = appData.tasks.filter(t => t.date === selectedDate && !t.completed);
+  const pendingTasks = appData.tasks.filter(t => getTaskDate(t) === selectedDate && !t.completed);
   if (pendingTasks.length === 0) {
     showToast('Không có việc nào cần dời!', 'info');
     return;
@@ -757,6 +900,53 @@ function moveAllPendingToTomorrow() {
 
   const shortDate = formatShortVNDate(tomorrowDateStr);
   showToast(`Đã dời ${pendingTasks.length} việc sang ngày mai (${shortDate})!`, 'success');
+  saveLocalData();
+  renderApp();
+  triggerCloudSync();
+}
+
+function moveAllPendingToToday() {
+  const today = getTodayDateStr();
+  const pendingTasks = appData.tasks.filter(t => getTaskDate(t) === selectedDate && !t.completed);
+  if (pendingTasks.length === 0) {
+    showToast('Không có việc chưa xong để dời!', 'info');
+    return;
+  }
+
+  const now = Date.now();
+  pendingTasks.forEach(task => {
+    task.date = today;
+    task.dateKey = today;
+    task.updatedAt = now;
+  });
+  appData.updatedAt = now;
+
+  showToast(`Đã dời ${pendingTasks.length} việc về hôm nay (${formatShortVNDate(today)})!`, 'success');
+  saveLocalData();
+  renderApp();
+  triggerCloudSync();
+}
+
+function moveAllOverdueToToday() {
+  const today = getTodayDateStr();
+  const overdueTasks = appData.tasks.filter(t => {
+    const d = getTaskDate(t);
+    return d && d < today && !t.completed;
+  });
+  if (overdueTasks.length === 0) {
+    showToast('Không có công việc quá hạn nào!', 'info');
+    return;
+  }
+
+  const now = Date.now();
+  overdueTasks.forEach(task => {
+    task.date = today;
+    task.dateKey = today;
+    task.updatedAt = now;
+  });
+  appData.updatedAt = now;
+
+  showToast(`Đã dời ${overdueTasks.length} việc quá hạn về hôm nay (${formatShortVNDate(today)})!`, 'success');
   saveLocalData();
   renderApp();
   triggerCloudSync();
@@ -788,7 +978,9 @@ function updateTask(taskId, newTitle, newDate, newTime, newNote) {
   const now = Date.now();
   task.title = newTitle.trim();
   task.date = newDate;
+  task.dateKey = newDate;
   task.time = newTime;
+  task.dueTime = newTime;
   task.note = newNote;
   task.updatedAt = now;
   appData.updatedAt = now;
@@ -802,12 +994,48 @@ function updateTask(taskId, newTitle, newDate, newTime, newNote) {
 // ==========================================
 // 6. UI RENDERING & COMPONENT BUILDERS
 // ==========================================
+function setChecklistViewMode(mode) {
+  checklistViewMode = mode === 'all' ? 'all' : 'day';
+  const daySection = document.getElementById('checklistDaySection');
+  const allSection = document.getElementById('checklistAllSection');
+  const btnDay = document.getElementById('btnChecklistModeDay');
+  const btnAll = document.getElementById('btnChecklistModeAll');
+  const badgeAll = document.getElementById('badgeAllTasksTotal');
+
+  if (daySection) daySection.classList.toggle('hidden', checklistViewMode !== 'day');
+  if (allSection) allSection.classList.toggle('hidden', checklistViewMode !== 'all');
+
+  const activePillClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30 active:scale-[0.99]';
+  const inactivePillClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 active:scale-[0.99]';
+
+  if (btnDay) btnDay.className = checklistViewMode === 'day' ? activePillClass : inactivePillClass;
+  if (btnAll) btnAll.className = checklistViewMode === 'all' ? activePillClass : inactivePillClass;
+  if (badgeAll) {
+    badgeAll.textContent = String((appData.tasks || []).length);
+    badgeAll.className = checklistViewMode === 'all'
+      ? 'text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-800/80 text-emerald-100 border border-emerald-400/30 leading-none'
+      : 'text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10 leading-none';
+  }
+
+  if (checklistViewMode === 'all') {
+    renderAllTasksView();
+  } else {
+    renderDateChips();
+    renderDateHeader();
+    renderOverdueBanner();
+    renderTasksForSelectedDate();
+  }
+  refreshIcons();
+}
+
 function renderApp() {
   renderDateChips();
   renderDateHeader();
+  renderOverdueBanner();
   renderTasksForSelectedDate();
+  renderAllTasksView();
   renderHistoryView();
-  lucide.createIcons();
+  refreshIcons();
 }
 
 function renderDateHeader() {
@@ -835,7 +1063,7 @@ function renderDateHeader() {
   }
 
   // Calculate stats for selected date
-  const dayTasks = appData.tasks.filter(t => t.date === selectedDate);
+  const dayTasks = appData.tasks.filter(t => getTaskDate(t) === selectedDate);
   const total = dayTasks.length;
   const completed = dayTasks.filter(t => t.completed).length;
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -852,53 +1080,197 @@ function renderDateHeader() {
 }
 
 function renderDateChips() {
+  const strip = document.getElementById('dateChipsStrip');
   const today = getTodayDateStr();
   const yesterday = addDaysToDateStr(today, -1);
   const tomorrow = addDaysToDateStr(today, 1);
-  const plus2 = addDaysToDateStr(today, 2);
-  const plus3 = addDaysToDateStr(today, 3);
 
-  // Set dates text
-  document.getElementById('dateTextPrev').textContent = formatShortVNDate(yesterday);
-  document.getElementById('dateTextToday').textContent = formatShortVNDate(today);
-  document.getElementById('dateTextTomorrow').textContent = formatShortVNDate(tomorrow);
-
-  const dPlus2 = parseDateStr(plus2);
-  document.getElementById('dateDayNamePlus2').textContent = getVietnameseDayOfWeek(dPlus2);
-  document.getElementById('dateTextPlus2').textContent = formatShortVNDate(plus2);
-
-  const dPlus3 = parseDateStr(plus3);
-  document.getElementById('dateDayNamePlus3').textContent = getVietnameseDayOfWeek(dPlus3);
-  document.getElementById('dateTextPlus3').textContent = formatShortVNDate(plus3);
-
-  // Helper to toggle active chip styling
-  const chips = [
-    { id: 'btnDatePrev', date: yesterday },
-    { id: 'btnDateToday', date: today },
-    { id: 'btnDateTomorrow', date: tomorrow },
-    { id: 'btnDatePlus2', date: plus2 },
-    { id: 'btnDatePlus3', date: plus3 }
-  ];
-
-  chips.forEach(item => {
-    const el = document.getElementById(item.id);
-    if (!el) return;
-    if (selectedDate === item.date) {
-      el.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3.5 rounded-xl bg-emerald-600/25 border-2 border-emerald-400 text-emerald-300 font-bold shadow-lg shadow-emerald-950/60 min-w-[80px] active:scale-95 transition';
-    } else {
-      el.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition active:scale-95 min-w-[76px]';
-    }
+  const statsByDate = {};
+  (appData.tasks || []).forEach(t => {
+    const d = getTaskDate(t);
+    if (!d) return;
+    if (!statsByDate[d]) statsByDate[d] = { total: 0, pending: 0 };
+    statsByDate[d].total++;
+    if (!t.completed) statsByDate[d].pending++;
   });
 
-  // Custom date chip display
-  const customChip = document.getElementById('dateTextCustom');
-  if (selectedDate !== yesterday && selectedDate !== today && selectedDate !== tomorrow && selectedDate !== plus2 && selectedDate !== plus3) {
-    customChip.textContent = formatShortVNDate(selectedDate);
-    customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-cyan-600/25 border-2 border-cyan-400 text-cyan-300 font-bold shadow-lg min-w-[76px] relative cursor-pointer';
+  const diffFromToday = diffDaysBetween(selectedDate, today);
+  const isWithinDefaultWindow = diffFromToday >= -3 && diffFromToday <= 2;
+
+  const stripDates = [];
+  if (isWithinDefaultWindow) {
+    for (let offset = -3; offset <= 2; offset++) {
+      stripDates.push(addDaysToDateStr(today, offset));
+    }
   } else {
-    customChip.textContent = 'Chọn ngày';
-    customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[76px] relative';
+    for (let offset = -2; offset <= 3; offset++) {
+      stripDates.push(addDaysToDateStr(selectedDate, offset));
+    }
   }
+
+  if (strip) {
+    strip.innerHTML = '';
+    let activeEl = null;
+
+    stripDates.forEach(dateStr => {
+      const isSelected = dateStr === selectedDate;
+      const isToday = dateStr === today;
+      const stats = statsByDate[dateStr] || { total: 0, pending: 0 };
+
+      let topLabel = getShortVietnameseDayOfWeek(parseDateStr(dateStr));
+      if (dateStr === today) topLabel = 'Hôm nay';
+      else if (dateStr === yesterday) topLabel = 'Hôm qua';
+      else if (dateStr === tomorrow) topLabel = 'Ngày mai';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('data-chip-date', dateStr);
+
+      if (isSelected) {
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-emerald-600/25 border-2 border-emerald-400 text-emerald-300 font-bold shadow-lg shadow-emerald-950/60 min-w-[72px] active:scale-95 transition';
+      } else if (isToday) {
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 transition active:scale-95 min-w-[70px]';
+      } else {
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition active:scale-95 min-w-[70px]';
+      }
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = `text-[10px] font-semibold leading-tight ${isSelected ? 'text-emerald-300' : (isToday ? 'text-emerald-400' : 'text-slate-400')}`;
+      labelSpan.textContent = topLabel;
+
+      const dateSpan = document.createElement('span');
+      dateSpan.className = `text-xs font-bold mt-0.5 leading-tight ${isSelected ? 'text-white' : 'text-slate-200'}`;
+      dateSpan.textContent = formatShortVNDate(dateStr);
+
+      const badgeSpan = document.createElement('span');
+      if (stats.pending > 0) {
+        badgeSpan.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 leading-tight';
+        badgeSpan.textContent = String(stats.pending);
+      } else if (stats.total > 0) {
+        badgeSpan.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 leading-tight';
+        badgeSpan.textContent = '✓';
+      } else {
+        badgeSpan.className = 'mt-0.5 text-[9px] opacity-0 leading-tight';
+        badgeSpan.textContent = '0';
+      }
+
+      btn.appendChild(labelSpan);
+      btn.appendChild(dateSpan);
+      btn.appendChild(badgeSpan);
+
+      btn.onclick = () => {
+        selectedDate = dateStr;
+        renderApp();
+      };
+
+      strip.appendChild(btn);
+      if (isSelected) activeEl = btn;
+    });
+
+    if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+      try {
+        activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      } catch (_) {}
+    }
+  }
+
+  // Update custom date picker label when outside default window or outside strip
+  const customChip = document.getElementById('dateTextCustom');
+  const datePickerInput = document.getElementById('inputCustomDatePicker');
+  if (datePickerInput) datePickerInput.value = selectedDate;
+
+  if (customChip) {
+    if (!isWithinDefaultWindow || !stripDates.includes(selectedDate)) {
+      customChip.textContent = formatShortVNDate(selectedDate);
+      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-2.5 sm:px-3 rounded-xl bg-cyan-600/25 border-2 border-cyan-400 text-cyan-300 font-bold shadow-lg min-w-[68px] sm:min-w-[76px] relative cursor-pointer transition active:scale-95';
+    } else {
+      customChip.textContent = 'Chọn ngày';
+      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[68px] sm:min-w-[76px] relative';
+    }
+  }
+}
+
+function renderOverdueBanner() {
+  const banner = document.getElementById('overdueBanner');
+  if (!banner) return;
+
+  const today = getTodayDateStr();
+  if (selectedDate !== today) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+    return;
+  }
+
+  const overdueTasks = (appData.tasks || []).filter(t => {
+    const d = getTaskDate(t);
+    return d && d < today && !t.completed;
+  });
+
+  if (overdueTasks.length === 0) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+    return;
+  }
+
+  const countByDate = {};
+  overdueTasks.forEach(t => {
+    const d = getTaskDate(t);
+    countByDate[d] = (countByDate[d] || 0) + 1;
+  });
+  const overdueDates = Object.keys(countByDate).sort().reverse();
+
+  banner.innerHTML = '';
+  banner.classList.remove('hidden');
+
+  const topRow = document.createElement('div');
+  topRow.className = 'flex flex-wrap items-center justify-between gap-2';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'flex items-center gap-2 text-xs text-amber-200 font-semibold';
+  titleWrap.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 flex-shrink-0"></i><span>Còn <strong>${overdueTasks.length}</strong> việc chưa xong từ ngày trước</span>`;
+
+  const btnGroup = document.createElement('div');
+  btnGroup.className = 'flex items-center gap-1.5 flex-shrink-0';
+
+  const btnViewOverdue = document.createElement('button');
+  btnViewOverdue.type = 'button';
+  btnViewOverdue.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 transition active:scale-95';
+  btnViewOverdue.textContent = 'Xem quá hạn';
+  btnViewOverdue.onclick = () => {
+    allFilterStatus = 'overdue';
+    allTimeRange = 'all';
+    setChecklistViewMode('all');
+  };
+
+  const btnMoveToday = document.createElement('button');
+  btnMoveToday.type = 'button';
+  btnMoveToday.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition active:scale-95 shadow-sm';
+  btnMoveToday.title = 'Dời tất cả việc quá hạn về hôm nay';
+  btnMoveToday.textContent = 'Về hôm nay';
+  btnMoveToday.onclick = () => moveAllOverdueToToday();
+
+  btnGroup.appendChild(btnViewOverdue);
+  btnGroup.appendChild(btnMoveToday);
+  topRow.appendChild(titleWrap);
+  topRow.appendChild(btnGroup);
+
+  const pillsRow = document.createElement('div');
+  pillsRow.className = 'flex items-center gap-1.5 overflow-x-auto no-scrollbar';
+  overdueDates.forEach(dateStr => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-950/70 hover:bg-slate-900 text-amber-300 border border-amber-500/20 transition active:scale-95';
+    pill.textContent = `${formatShortVNDate(dateStr)} (${countByDate[dateStr]})`;
+    pill.title = `Xem ngày ${formatFullVNDate(dateStr)}`;
+    pill.onclick = () => {
+      selectedDate = dateStr;
+      renderApp();
+    };
+    pillsRow.appendChild(pill);
+  });
+
+  banner.appendChild(topRow);
+  banner.appendChild(pillsRow);
 }
 
 function renderTasksForSelectedDate() {
@@ -908,14 +1280,29 @@ function renderTasksForSelectedDate() {
   const emptyCompleted = document.getElementById('emptyCompletedState');
   const badgePendingCount = document.getElementById('badgePendingCount');
   const badgeCompletedCount = document.getElementById('badgeCompletedCount');
+  const btnMoveAll = document.getElementById('btnMoveAllToTomorrow');
 
   // Filter tasks for current selected date
-  const dayTasks = appData.tasks.filter(t => t.date === selectedDate);
+  const dayTasks = appData.tasks.filter(t => getTaskDate(t) === selectedDate);
   const pendingTasks = dayTasks.filter(t => !t.completed);
   const completedTasks = dayTasks.filter(t => t.completed);
 
   badgePendingCount.textContent = pendingTasks.length;
   badgeCompletedCount.textContent = completedTasks.length;
+
+  // Dynamic bulk move button: past days move to today, today/future move to tomorrow
+  if (btnMoveAll) {
+    const today = getTodayDateStr();
+    if (selectedDate < today) {
+      btnMoveAll.innerHTML = '<i data-lucide="calendar-check" class="w-3.5 h-3.5"></i> Dời tất cả về hôm nay';
+      btnMoveAll.title = 'Chuyển tất cả việc chưa xong của ngày này về hôm nay';
+      btnMoveAll.onclick = moveAllPendingToToday;
+    } else {
+      btnMoveAll.innerHTML = '<i data-lucide="chevrons-right" class="w-3.5 h-3.5"></i> Dời tất cả sang mai';
+      btnMoveAll.title = 'Chuyển tất cả việc chưa xong sang ngày mai';
+      btnMoveAll.onclick = moveAllPendingToTomorrow;
+    }
+  }
 
   // Render Pending List
   pendingContainer.innerHTML = '';
@@ -943,7 +1330,7 @@ function renderTasksForSelectedDate() {
   completedContainer.classList.toggle('hidden', !showCompletedList);
 }
 
-function createTaskCardElement(task, isCompleted) {
+function createTaskCardElement(task, isCompleted, options = {}) {
   const card = document.createElement('div');
   card.className = `task-card group flex items-start gap-3 p-3.5 rounded-2xl border transition-all duration-200 ${
     isCompleted 
@@ -951,7 +1338,7 @@ function createTaskCardElement(task, isCompleted) {
       : 'bg-slate-900/90 border-white/10 hover:border-slate-600 shadow-md'
   }`;
 
-  // Big Rounded Checkbox (24x24px with generous 44x44 tap area)
+  // Big Rounded Checkbox (24x24px with generous tap area)
   const checkboxWrapper = document.createElement('button');
   checkboxWrapper.type = 'button';
   checkboxWrapper.className = 'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-90 mt-0.5';
@@ -985,24 +1372,35 @@ function createTaskCardElement(task, isCompleted) {
   const metaLine = document.createElement('div');
   metaLine.className = 'flex flex-wrap items-center gap-2 text-[11px] text-slate-400';
 
+  const today = getTodayDateStr();
+  const taskDate = getTaskDate(task);
+  const isOverdue = !isCompleted && Boolean(taskDate) && taskDate < today;
+
+  if (options.showOverdueBadge && isOverdue) {
+    const overdueBadge = document.createElement('span');
+    overdueBadge.className = 'inline-flex items-center gap-1 font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20';
+    overdueBadge.innerHTML = '<i data-lucide="alert-triangle" class="w-3 h-3"></i> Quá hạn';
+    metaLine.appendChild(overdueBadge);
+  }
+
   if (task.time) {
     const timeBadge = document.createElement('span');
     timeBadge.className = 'inline-flex items-center gap-1 font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20';
-    timeBadge.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${task.time}`;
+    timeBadge.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${escapeHtml(task.time)}`;
     metaLine.appendChild(timeBadge);
   }
 
   if (isCompleted && task.completedAt) {
     const completedBadge = document.createElement('span');
     completedBadge.className = 'inline-flex items-center gap-1 font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20';
-    completedBadge.innerHTML = `<i data-lucide="check-check" class="w-3 h-3"></i> Xong lúc ${formatTime(task.completedAt)}`;
+    completedBadge.innerHTML = `<i data-lucide="check-check" class="w-3 h-3"></i> Xong lúc ${escapeHtml(formatTime(task.completedAt))}`;
     metaLine.appendChild(completedBadge);
   }
 
   if (task.note) {
     const noteBadge = document.createElement('span');
     noteBadge.className = 'inline-flex items-center gap-1 text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md max-w-[200px] truncate';
-    noteBadge.innerHTML = `<i data-lucide="file-text" class="w-3 h-3 text-blue-400"></i> ${task.note}`;
+    noteBadge.innerHTML = `<i data-lucide="file-text" class="w-3 h-3 text-blue-400"></i> ${escapeHtml(task.note)}`;
     metaLine.appendChild(noteBadge);
   }
 
@@ -1011,22 +1409,31 @@ function createTaskCardElement(task, isCompleted) {
     contentArea.appendChild(metaLine);
   }
 
-  // Action Buttons Group (Dời sang mai, Sửa, Xóa)
+  // Action Buttons Group (Về hôm nay / Dời mai, Sửa, Xóa)
   const actionsGroup = document.createElement('div');
   actionsGroup.className = 'flex items-center gap-1 flex-shrink-0 self-start sm:self-center';
 
   if (!isCompleted) {
-    // 1-Click "Dời sang mai" Button
-    const moveTomorrowBtn = document.createElement('button');
-    moveTomorrowBtn.type = 'button';
-    moveTomorrowBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-white/5 transition flex items-center gap-1 active:scale-95';
-    moveTomorrowBtn.title = 'Dời công việc sang ngày mai';
-    moveTomorrowBtn.innerHTML = '<i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Dời mai</span>';
-    moveTomorrowBtn.onclick = (e) => {
-      e.stopPropagation();
-      moveTaskToTomorrow(task.id);
-    };
-    actionsGroup.appendChild(moveTomorrowBtn);
+    const moveBtn = document.createElement('button');
+    moveBtn.type = 'button';
+    if (isOverdue) {
+      moveBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition flex items-center gap-1 active:scale-95';
+      moveBtn.title = 'Dời công việc về hôm nay';
+      moveBtn.innerHTML = '<i data-lucide="calendar-check" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Về hôm nay</span>';
+      moveBtn.onclick = (e) => {
+        e.stopPropagation();
+        moveTaskToToday(task.id);
+      };
+    } else {
+      moveBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-white/5 transition flex items-center gap-1 active:scale-95';
+      moveBtn.title = 'Dời công việc sang ngày mai';
+      moveBtn.innerHTML = '<i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Dời mai</span>';
+      moveBtn.onclick = (e) => {
+        e.stopPropagation();
+        moveTaskToTomorrow(task.id);
+      };
+    }
+    actionsGroup.appendChild(moveBtn);
   }
 
   // Edit Button
@@ -1060,6 +1467,212 @@ function createTaskCardElement(task, isCompleted) {
   return card;
 }
 
+function renderAllTasksView() {
+  const allTasks = Array.isArray(appData.tasks) ? appData.tasks : [];
+  const today = getTodayDateStr();
+
+  const totalCount = allTasks.length;
+  const pendingCount = allTasks.filter(t => !t.completed).length;
+  const overdueCount = allTasks.filter(t => {
+    const d = getTaskDate(t);
+    return !t.completed && Boolean(d) && d < today;
+  }).length;
+  const doneCount = allTasks.filter(t => !!t.completed).length;
+
+  const badgeAll = document.getElementById('badgeAllTasksTotal');
+  if (badgeAll) badgeAll.textContent = String(totalCount);
+
+  const countTotalEl = document.getElementById('allCountTotal');
+  const countPendingEl = document.getElementById('allCountPending');
+  const countOverdueEl = document.getElementById('allCountOverdue');
+  const countDoneEl = document.getElementById('allCountDone');
+  if (countTotalEl) countTotalEl.textContent = String(totalCount);
+  if (countPendingEl) countPendingEl.textContent = String(pendingCount);
+  if (countOverdueEl) countOverdueEl.textContent = String(overdueCount);
+  if (countDoneEl) countDoneEl.textContent = String(doneCount);
+
+  // Highlight active KPI filter card
+  const filterButtons = [
+    { id: 'btnAllFilterAll', key: 'all', active: 'bg-emerald-600/20 border-2 border-emerald-500 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-emerald-500/40' },
+    { id: 'btnAllFilterPending', key: 'pending', active: 'bg-amber-600/20 border-2 border-amber-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-amber-500/40' },
+    { id: 'btnAllFilterOverdue', key: 'overdue', active: 'bg-rose-600/20 border-2 border-rose-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-rose-500/40' },
+    { id: 'btnAllFilterDone', key: 'completed', active: 'bg-cyan-600/20 border-2 border-cyan-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-cyan-500/40' }
+  ];
+  filterButtons.forEach(item => {
+    const btn = document.getElementById(item.id);
+    if (!btn) return;
+    const isSelected = allFilterStatus === item.key;
+    btn.className = `flex flex-col items-start justify-between p-3 rounded-2xl text-left transition active:scale-95 ${isSelected ? item.active : item.inactive}`;
+  });
+
+  // Update time range buttons
+  document.querySelectorAll('[data-all-range]').forEach(btn => {
+    const rangeVal = btn.getAttribute('data-all-range');
+    const isActive = rangeVal === allTimeRange;
+    btn.className = isActive
+      ? 'flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white transition active:scale-95'
+      : 'flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95';
+  });
+
+  const labelSortEl = document.getElementById('labelAllTasksSort');
+  if (labelSortEl) {
+    labelSortEl.textContent = allSortOrder === 'desc' ? 'Mới nhất trước' : 'Cũ nhất trước';
+  }
+
+  const btnClearSearch = document.getElementById('btnClearAllSearch');
+  if (btnClearSearch) {
+    btnClearSearch.classList.toggle('hidden', !allSearchQuery);
+  }
+
+  const btnMoveOverdue = document.getElementById('btnMoveAllOverdueFromAll');
+  if (btnMoveOverdue) {
+    btnMoveOverdue.classList.toggle('hidden', overdueCount === 0);
+    btnMoveOverdue.innerHTML = `<i data-lucide="calendar-check" class="w-3.5 h-3.5"></i><span>Dời ${overdueCount} quá hạn về hôm nay</span>`;
+  }
+
+  const container = document.getElementById('containerAllTasksGrouped');
+  const emptyState = document.getElementById('emptyAllTasksState');
+  if (!container || !emptyState) return;
+
+  const q = (allSearchQuery || '').toLowerCase().trim();
+  const min7d = addDaysToDateStr(today, -7);
+  const min30d = addDaysToDateStr(today, -30);
+
+  const filteredTasks = allTasks.filter(t => {
+    const d = getTaskDate(t);
+    if (allFilterStatus === 'pending' && t.completed) return false;
+    if (allFilterStatus === 'overdue' && (t.completed || !d || d >= today)) return false;
+    if (allFilterStatus === 'completed' && !t.completed) return false;
+
+    if (allTimeRange === 'past' && (!d || d >= today)) return false;
+    if (allTimeRange === 'upcoming' && (!d || d < today)) return false;
+    if (allTimeRange === '7d' && (!d || d < min7d || d > today)) return false;
+    if (allTimeRange === '30d' && (!d || d < min30d || d > today)) return false;
+
+    if (q) {
+      const titleMatch = (t.title || '').toLowerCase().includes(q);
+      const noteMatch = (t.note || '').toLowerCase().includes(q);
+      const dateMatch = d.includes(q) || (d ? formatFullVNDate(d).toLowerCase().includes(q) : false);
+      if (!titleMatch && !noteMatch && !dateMatch) return false;
+    }
+    return true;
+  });
+
+  container.innerHTML = '';
+  if (filteredTasks.length === 0) {
+    emptyState.classList.remove('hidden');
+    return;
+  }
+  emptyState.classList.add('hidden');
+
+  // Group filtered tasks by date
+  const grouped = {};
+  filteredTasks.forEach(t => {
+    const d = getTaskDate(t) || 'unknown';
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(t);
+  });
+
+  const sortedDates = Object.keys(grouped).sort();
+  if (allSortOrder === 'desc') sortedDates.reverse();
+
+  sortedDates.forEach(dateStr => {
+    const groupTasks = grouped[dateStr].slice().sort((a, b) => {
+      if (Boolean(a.completed) !== Boolean(b.completed)) {
+        return a.completed ? 1 : -1;
+      }
+      return (a.time || a.dueTime || '').localeCompare(b.time || b.dueTime || '');
+    });
+
+    const total = groupTasks.length;
+    const done = groupTasks.filter(t => t.completed).length;
+    const hasOverdue = dateStr !== 'unknown' && dateStr < today && done < total;
+    const isCollapsed = collapsedAllDates.has(dateStr);
+
+    const groupCard = document.createElement('div');
+    groupCard.className = `rounded-2xl border bg-slate-900/75 shadow-md overflow-hidden transition ${
+      hasOverdue ? 'border-amber-500/30' : 'border-white/10'
+    }`;
+
+    const header = document.createElement('div');
+    header.className = 'flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-950/60 cursor-pointer select-none hover:bg-slate-900/80 transition';
+    header.onclick = () => {
+      if (collapsedAllDates.has(dateStr)) collapsedAllDates.delete(dateStr);
+      else collapsedAllDates.add(dateStr);
+      renderAllTasksView();
+      refreshIcons();
+    };
+
+    const left = document.createElement('div');
+    left.className = 'flex items-center gap-2 min-w-0';
+
+    const chevron = document.createElement('i');
+    chevron.setAttribute('data-lucide', isCollapsed ? 'chevron-right' : 'chevron-down');
+    chevron.className = 'w-4 h-4 text-slate-400 flex-shrink-0';
+
+    const relBadge = document.createElement('span');
+    if (dateStr === today) {
+      relBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex-shrink-0';
+    } else if (hasOverdue) {
+      relBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex-shrink-0';
+    } else if (dateStr > today) {
+      relBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex-shrink-0';
+    } else {
+      relBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 flex-shrink-0';
+    }
+    relBadge.textContent = dateStr === 'unknown' ? 'Khác' : getRelativeDateLabel(dateStr);
+
+    const dateTitle = document.createElement('span');
+    dateTitle.className = 'text-xs sm:text-sm font-bold text-white truncate';
+    dateTitle.textContent = dateStr === 'unknown' ? 'Chưa gắn ngày' : formatFullVNDate(dateStr);
+
+    left.appendChild(chevron);
+    left.appendChild(relBadge);
+    left.appendChild(dateTitle);
+
+    const right = document.createElement('div');
+    right.className = 'flex items-center gap-2 flex-shrink-0 ml-auto';
+
+    const ratioPill = document.createElement('span');
+    if (done === total && total > 0) {
+      ratioPill.className = 'text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      ratioPill.textContent = `✓ ${done}/${total}`;
+    } else {
+      ratioPill.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-white/10';
+      ratioPill.textContent = `${done}/${total}`;
+    }
+    right.appendChild(ratioPill);
+
+    if (dateStr !== 'unknown') {
+      const btnGoDay = document.createElement('button');
+      btnGoDay.type = 'button';
+      btnGoDay.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white border border-white/10 transition active:scale-95';
+      btnGoDay.textContent = 'Xem ngày này';
+      btnGoDay.onclick = (e) => {
+        e.stopPropagation();
+        selectedDate = dateStr;
+        setChecklistViewMode('day');
+      };
+      right.appendChild(btnGoDay);
+    }
+
+    header.appendChild(left);
+    header.appendChild(right);
+    groupCard.appendChild(header);
+
+    if (!isCollapsed) {
+      const listWrap = document.createElement('div');
+      listWrap.className = 'p-2.5 flex flex-col gap-2 border-t border-white/5';
+      groupTasks.forEach(task => {
+        listWrap.appendChild(createTaskCardElement(task, !!task.completed, { showOverdueBadge: true }));
+      });
+      groupCard.appendChild(listWrap);
+    }
+
+    container.appendChild(groupCard);
+  });
+}
+
 // ==========================================
 // 7. HISTORY & DISCIPLINE STREAK VIEW
 // ==========================================
@@ -1069,24 +1682,48 @@ function renderHistoryView() {
   const streakCountEl = document.getElementById('streakCount');
   const totalTasksEl = document.getElementById('totalLifetimeTasks');
   const totalCompletedEl = document.getElementById('totalLifetimeCompleted');
+  const monthSelect = document.getElementById('selectHistoryMonth');
 
   // Lifetime counts
   totalTasksEl.textContent = appData.tasks.length;
   totalCompletedEl.textContent = appData.tasks.filter(t => t.completed).length;
 
-  // Group tasks by date
+  // Group ALL tasks by date
   const dateMap = {};
   appData.tasks.forEach(t => {
-    if (!t.date) return;
-    if (!dateMap[t.date]) dateMap[t.date] = [];
-    dateMap[t.date].push(t);
+    const d = getTaskDate(t);
+    if (!d) return;
+    if (!dateMap[d]) dateMap[d] = [];
+    dateMap[d].push(t);
   });
 
   const uniqueDates = Object.keys(dateMap).sort().reverse();
 
+  // Populate month dropdown while preserving selection
+  if (monthSelect) {
+    const months = Array.from(new Set(uniqueDates.map(d => d.slice(0, 7)).filter(Boolean))).sort().reverse();
+    const prevValue = historyMonthFilter || 'all';
+    monthSelect.innerHTML = '<option value="all">Tất cả các tháng</option>';
+    months.forEach(ym => {
+      const [y, m] = ym.split('-');
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = `Tháng ${m}/${y}`;
+      monthSelect.appendChild(opt);
+    });
+    if (prevValue === 'all' || months.includes(prevValue)) {
+      monthSelect.value = prevValue;
+      historyMonthFilter = prevValue;
+    } else {
+      monthSelect.value = 'all';
+      historyMonthFilter = 'all';
+    }
+  }
+
   // Calculate Streak
+  const today = getTodayDateStr();
   let streak = 0;
-  let checkDate = getTodayDateStr();
+  let checkDate = today;
 
   // If today has completed task, count today, otherwise start check from yesterday
   const todayTasks = dateMap[checkDate] || [];
@@ -1108,42 +1745,62 @@ function renderHistoryView() {
 
   streakCountEl.textContent = streak;
 
+  // Apply month & search filters for feed display
+  const q = (historySearchQuery || '').toLowerCase().trim();
+  const filteredDates = uniqueDates.filter(dateStr => {
+    if (historyMonthFilter !== 'all' && !dateStr.startsWith(historyMonthFilter)) {
+      return false;
+    }
+    if (!q) return true;
+    if (dateStr.includes(q) || formatFullVNDate(dateStr).toLowerCase().includes(q)) return true;
+    return dateMap[dateStr].some(t =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.note || '').toLowerCase().includes(q)
+    );
+  });
+
   // Render History Days Cards
   container.innerHTML = '';
-  if (uniqueDates.length === 0) {
+  if (filteredDates.length === 0) {
     emptyHistory.classList.remove('hidden');
     return;
   }
 
   emptyHistory.classList.add('hidden');
-  uniqueDates.forEach(dateStr => {
-    const tasks = dateMap[dateStr];
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.completed).length;
+  filteredDates.forEach(dateStr => {
+    const allDayTasks = dateMap[dateStr];
+    const total = allDayTasks.length;
+    const completed = allDayTasks.filter(t => t.completed).length;
     const percent = Math.round((completed / total) * 100);
+
+    const visibleTasks = q
+      ? (dateStr.includes(q) || formatFullVNDate(dateStr).toLowerCase().includes(q)
+          ? allDayTasks
+          : allDayTasks.filter(t => (t.title || '').toLowerCase().includes(q) || (t.note || '').toLowerCase().includes(q)))
+      : allDayTasks;
 
     const card = document.createElement('div');
     card.className = 'bg-slate-900/90 rounded-2xl p-4 border border-white/10 shadow-md flex flex-col gap-3 transition hover:border-slate-600';
 
     const header = document.createElement('div');
-    header.className = 'flex items-center justify-between';
+    header.className = 'flex flex-wrap items-center justify-between gap-2';
 
     const left = document.createElement('div');
-    left.className = 'flex items-center gap-2.5';
+    left.className = 'flex items-center gap-2.5 min-w-0';
 
     const badgeRelation = document.createElement('span');
-    badgeRelation.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300';
+    badgeRelation.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 flex-shrink-0';
     badgeRelation.textContent = getRelativeDateLabel(dateStr);
 
     const dateTitle = document.createElement('span');
-    dateTitle.className = 'text-sm font-bold text-white';
+    dateTitle.className = 'text-sm font-bold text-white truncate';
     dateTitle.textContent = formatFullVNDate(dateStr);
 
     left.appendChild(badgeRelation);
     left.appendChild(dateTitle);
 
     const right = document.createElement('div');
-    right.className = 'flex items-center gap-2';
+    right.className = 'flex items-center gap-2 flex-shrink-0';
 
     const pill = document.createElement('span');
     if (percent === 100) {
@@ -1155,12 +1812,13 @@ function renderHistoryView() {
     }
 
     const btnGoToDate = document.createElement('button');
+    btnGoToDate.type = 'button';
     btnGoToDate.className = 'px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition';
     btnGoToDate.textContent = 'Xem ngày này';
     btnGoToDate.onclick = () => {
       selectedDate = dateStr;
       switchTab('checklist');
-      renderApp();
+      setChecklistViewMode('day');
     };
 
     right.appendChild(pill);
@@ -1174,24 +1832,58 @@ function renderHistoryView() {
     const taskPreviewList = document.createElement('div');
     taskPreviewList.className = 'flex flex-col gap-1.5 pt-2 border-t border-white/5';
 
-    tasks.forEach(t => {
+    visibleTasks.forEach(t => {
       const row = document.createElement('div');
-      row.className = 'flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-950/40';
+      row.className = 'flex items-center justify-between gap-2 text-xs py-1.5 px-2 rounded-lg bg-slate-950/40';
 
       const rowLeft = document.createElement('div');
-      rowLeft.className = `flex items-center gap-2 truncate ${t.completed ? 'line-through text-slate-500' : 'text-slate-300'}`;
-      rowLeft.innerHTML = t.completed 
-        ? '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0"></i>' 
-        : '<i data-lucide="circle" class="w-3.5 h-3.5 text-slate-600 flex-shrink-0"></i>';
-      
+      rowLeft.className = 'flex items-center gap-2 min-w-0 flex-1';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = `w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition active:scale-90 ${
+        t.completed
+          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+          : 'bg-slate-900 text-slate-500 hover:text-emerald-400 border border-white/10 hover:border-emerald-500/40'
+      }`;
+      toggleBtn.title = t.completed ? 'Đánh dấu chưa xong' : 'Đánh dấu hoàn thành';
+      toggleBtn.innerHTML = t.completed
+        ? '<i data-lucide="check" class="w-3 h-3 stroke-[3]"></i>'
+        : '<i data-lucide="circle" class="w-3 h-3"></i>';
+      toggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleTaskComplete(t.id);
+      };
+
       const titleSpan = document.createElement('span');
-      titleSpan.className = 'truncate';
+      titleSpan.className = `truncate ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`;
       titleSpan.textContent = t.title;
+
+      rowLeft.appendChild(toggleBtn);
       rowLeft.appendChild(titleSpan);
 
-      const rowRight = document.createElement('span');
-      rowRight.className = 'text-[11px] text-slate-500 font-mono flex-shrink-0 ml-2';
-      rowRight.textContent = t.time || (t.completedAt ? formatTime(t.completedAt) : '');
+      const rowRight = document.createElement('div');
+      rowRight.className = 'flex items-center gap-2 flex-shrink-0';
+
+      if (!t.completed && dateStr < today) {
+        const moveBtn = document.createElement('button');
+        moveBtn.type = 'button';
+        moveBtn.className = 'px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition active:scale-95';
+        moveBtn.textContent = 'Về hôm nay';
+        moveBtn.onclick = (e) => {
+          e.stopPropagation();
+          moveTaskToToday(t.id);
+        };
+        rowRight.appendChild(moveBtn);
+      }
+
+      const timeStr = t.time || t.dueTime || (t.completedAt ? formatTime(t.completedAt) : '');
+      if (timeStr) {
+        const timeEl = document.createElement('span');
+        timeEl.className = 'text-[11px] text-slate-500 font-mono';
+        timeEl.textContent = timeStr;
+        rowRight.appendChild(timeEl);
+      }
 
       row.appendChild(rowLeft);
       row.appendChild(rowRight);
@@ -1212,8 +1904,8 @@ function openEditModal(taskId) {
 
   document.getElementById('editTaskId').value = task.id;
   document.getElementById('editTaskTitle').value = task.title;
-  document.getElementById('editTaskDate').value = task.date;
-  document.getElementById('editTaskTime').value = task.time || '';
+  document.getElementById('editTaskDate').value = getTaskDate(task);
+  document.getElementById('editTaskTime').value = task.time || task.dueTime || '';
   document.getElementById('editTaskNote').value = task.note || '';
 
   const modal = document.getElementById('modalEditTask');
@@ -1389,7 +2081,7 @@ function switchTab(tabName) {
     renderHistoryView();
     if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
   }
-  lucide.createIcons();
+  refreshIcons();
 }
 
 // ==========================================
@@ -1519,7 +2211,7 @@ function renderAutoFbView() {
           </div>
         </div>
       `;
-      lucide.createIcons();
+      refreshIcons();
       return;
     }
 
@@ -1555,17 +2247,195 @@ function renderAutoFbView() {
 // ==========================================
 // 8.1 SHEET UI RENDERERS & EVENT HANDLERS
 // ==========================================
+function copyTextToClipboard(text, label = 'dữ liệu') {
+  const value = text === null || text === undefined ? '' : String(text);
+  if (!value) {
+    showToast(`Không có ${label} để sao chép`, 'info');
+    return;
+  }
+
+  const fallbackCopy = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = value;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        showToast(`Đã sao chép ${label}!`, 'success');
+      } else {
+        showToast('Không thể sao chép tự động', 'info');
+      }
+    } catch (_) {
+      showToast('Không thể sao chép tự động', 'info');
+    }
+  };
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(value).then(() => {
+      showToast(`Đã sao chép ${label}!`, 'success');
+    }).catch(() => {
+      fallbackCopy();
+    });
+  } else {
+    fallbackCopy();
+  }
+}
+
+function getSheetStatusBadgeHtml(statusVal) {
+  const s = (statusVal === null || statusVal === undefined) ? '' : String(statusVal).trim();
+  if (!s) {
+    return '<span class="text-slate-600 italic">—</span>';
+  }
+  const lower = s.toLowerCase();
+  if (lower === 'live') {
+    return '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">🟢 Live</span>';
+  }
+  if (lower === 'đang dùng' || lower === 'dang dung') {
+    return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">🔵 ${escapeHtml(s)}</span>`;
+  }
+  if (lower === 'chờ nuôi' || lower === 'cho nuoi') {
+    return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">🟡 ${escapeHtml(s)}</span>`;
+  }
+  if (lower === 'checkpoint') {
+    return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30">🟠 ${escapeHtml(s)}</span>`;
+  }
+  if (lower === 'die') {
+    return '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">🔴 Die</span>';
+  }
+  if (lower === 'sai pass') {
+    return '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">🟡 Sai Pass</span>';
+  }
+  if (lower === 'chờ duyệt' || lower === 'cho duyet') {
+    return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700/60 text-slate-300 border border-slate-600">⚪ ${escapeHtml(s)}</span>`;
+  }
+  if (lower === 'cần check' || lower === 'can check') {
+    return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30">🟠 ${escapeHtml(s)}</span>`;
+  }
+  return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">${escapeHtml(s)}</span>`;
+}
+
+function renderSheetCellHtml(row, col, colIndex) {
+  const rawVal = row[col.id];
+  const strVal = (rawVal === null || rawVal === undefined) ? '' : String(rawVal);
+  const trimmedVal = strVal.trim();
+  const hasVal = trimmedVal.length > 0;
+  const colType = col.type || 'text';
+  const rowIdEsc = escapeHtml(row.id);
+  const colIdEsc = escapeHtml(col.id);
+
+  if (colType === 'password') {
+    const pwKey = `${row.id}::${col.id}`;
+    const pwKeyEsc = escapeHtml(pwKey);
+    const isPwVisible = visiblePasswords.has(pwKey) || visiblePasswords.has(row.id);
+    const pwDisplay = hasVal
+      ? (isPwVisible ? escapeHtml(strVal) : '••••••••')
+      : '<span class="text-slate-600 italic">Trống</span>';
+
+    return `
+      <td class="p-2.5 font-mono text-[11px] text-slate-300">
+        <div class="flex items-center gap-1.5">
+          <span>${pwDisplay}</span>
+          ${hasVal ? `
+            <button type="button" data-toggle-pw="${pwKeyEsc}" class="text-slate-400 hover:text-white p-1 rounded" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
+              <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
+            </button>
+            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded" title="Sao chép">
+              <i data-lucide="copy" class="w-3 h-3"></i>
+            </button>
+          ` : ''}
+        </div>
+      </td>
+    `;
+  }
+
+  if (colType === '2fa') {
+    return `
+      <td class="p-2.5 font-mono text-[11px] text-cyan-300">
+        <div class="flex items-center gap-1.5 max-w-[200px]">
+          ${hasVal
+            ? `<span class="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>
+               <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép 2FA">
+                 <i data-lucide="copy" class="w-3 h-3"></i>
+               </button>`
+            : '<span class="text-slate-600">—</span>'}
+        </div>
+      </td>
+    `;
+  }
+
+  if (colType === 'status') {
+    return `<td class="p-2.5 text-center">${getSheetStatusBadgeHtml(strVal)}</td>`;
+  }
+
+  const isHttpLink = /^https?:\/\//i.test(trimmedVal);
+  if (colType === 'link' || (colType === 'text' && isHttpLink)) {
+    return `
+      <td class="p-2.5 text-[11px]">
+        <div class="flex items-center gap-1.5 max-w-[220px]">
+          ${hasVal
+            ? (isHttpLink
+                ? `<a href="${escapeHtml(trimmedVal)}" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 underline truncate" title="${escapeHtml(trimmedVal)}">${escapeHtml(trimmedVal)}</a>`
+                : `<span class="text-slate-300 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>`) +
+              `<button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép link">
+                 <i data-lucide="copy" class="w-3 h-3"></i>
+               </button>`
+            : '<span class="text-slate-600">—</span>'}
+        </div>
+      </td>
+    `;
+  }
+
+  if (colType === 'number') {
+    return `
+      <td class="p-2.5 text-right font-mono tabular-nums text-[11px] text-slate-200">
+        ${hasVal ? escapeHtml(strVal) : '<span class="text-slate-600">—</span>'}
+      </td>
+    `;
+  }
+
+  if (colType === 'copy_text' || col.id === 'copy_text' || col.id === 'username') {
+    return `
+      <td class="p-2.5 font-mono text-[11px] text-emerald-300">
+        <div class="flex items-center gap-1.5 max-w-[210px]">
+          <span class="truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</span>
+          ${hasVal ? `
+            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép">
+              <i data-lucide="copy" class="w-3 h-3"></i>
+            </button>
+          ` : ''}
+        </div>
+      </td>
+    `;
+  }
+
+  const textToneClass = colIndex === 0 ? 'font-medium text-slate-200' : 'text-slate-300 text-[11px]';
+  return `
+    <td class="p-2.5 ${textToneClass}">
+      <div class="max-w-[210px] truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</div>
+    </td>
+  `;
+}
+
 async function loadAndRenderSheetsTab() {
   const countEl = document.getElementById('sheetRowCountText');
   const tbody = document.getElementById('sheetTableBody');
+  const activeSheet = getActiveSheet();
+  const colSpan = getResolvedColumns(activeSheet).length + 2;
 
   if (countEl) {
     countEl.innerHTML = '<span class="inline-flex items-center gap-1.5 text-cyan-400 font-medium"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Đang tải dữ liệu mới nhất từ Cloud...</span>';
   }
   if (tbody && (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0)) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs"><div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-6 h-6 animate-spin text-cyan-400"></i><span>Đang nạp dữ liệu mới nhất từ Laptop / Cloud...</span></div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-12 text-slate-400 text-xs"><div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-6 h-6 animate-spin text-cyan-400"></i><span>Đang nạp dữ liệu mới nhất từ Laptop / Cloud...</span></div></td></tr>`;
   }
-  lucide.createIcons();
+  refreshIcons();
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 6000);
@@ -1591,8 +2461,13 @@ async function loadAndRenderSheetsTab() {
       if (data.files && data.files['sheets_data.json'] && data.files['sheets_data.json'].content) {
         const parsed = JSON.parse(data.files['sheets_data.json'].content);
         if (parsed && Array.isArray(parsed.sheets)) {
-          sheetsData = parsed;
-          saveLocalSheetsData();
+          if (shouldAdoptRemoteSheets(parsed)) {
+            sheetsData = parsed;
+            saveLocalSheetsData(false);
+            localStorage.removeItem(STORAGE_KEY_SHEETS_DIRTY);
+          } else if (!sheetDebounceTimer) {
+            pushCloudSheetsData(false);
+          }
         }
       }
       if (data.files && data.files['tunnel_status.json'] && data.files['tunnel_status.json'].content) {
@@ -1634,20 +2509,20 @@ async function loadAndRenderSheetsTab() {
 }
 
 function renderSheetsView() {
+  const activeSheet = getActiveSheet();
+  const columns = getResolvedColumns(activeSheet);
+  const colSpan = columns.length + 2;
+
   try {
-    if (!sheetsData || !Array.isArray(sheetsData.sheets) || sheetsData.sheets.length === 0) {
+    if (!activeSheet) {
       const countEl = document.getElementById('sheetRowCountText');
       if (countEl) countEl.textContent = 'Chưa có dữ liệu trang tính';
       const tbody = document.getElementById('sheetTableBody');
       if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-500 text-xs">Chưa có dữ liệu trang tính. Bấm "+ Thêm Sheet" để bắt đầu.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-slate-500 text-xs">Chưa có dữ liệu trang tính. Bấm "+ Thêm Sheet" để bắt đầu.</td></tr>`;
       }
       return;
     }
-
-    const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
-    if (!activeSheet) return;
-    sheetsData.activeSheetId = activeSheet.id;
 
     // 1. Render Sheet Tabs
     const tabsContainer = document.getElementById('sheetTabsList');
@@ -1659,11 +2534,12 @@ function renderSheetsView() {
         const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/5';
 
         return `
-          <button 
-            onclick="selectSheetTab('${sheet.id}')"
+          <button
+            type="button"
+            data-sheet-id="${escapeHtml(sheet.id)}"
             class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition active:scale-95 ${isActive ? activeClass : inactiveClass}"
           >
-            <span>${sheet.icon || '📄'}</span>
+            <span>${escapeHtml(sheet.icon || '📄')}</span>
             <span>${escapeHtml(sheet.name)}</span>
             <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
           </button>
@@ -1671,100 +2547,63 @@ function renderSheetsView() {
       }).join('');
     }
 
-    // 2. Render Headers
+    // 2. Render Dynamic Headers
     const thead = document.getElementById('sheetTableHead');
     if (thead) {
+      const dynamicThs = columns.map(col => {
+        const alignClass = col.type === 'status' ? 'text-center' : (col.type === 'number' ? 'text-right' : '');
+        return `<th class="p-2.5 ${alignClass}">${escapeHtml(col.name || col.id)}</th>`;
+      }).join('');
       thead.innerHTML = `
         <tr>
           <th class="p-2.5 text-center w-12">#</th>
-          <th class="p-2.5">Tên / Nhãn</th>
-          <th class="p-2.5">Tài Khoản / Username</th>
-          <th class="p-2.5">Mật Khẩu</th>
-          <th class="p-2.5">Mail Khôi Phục / SĐT</th>
-          <th class="p-2.5 text-center">Trạng Thái</th>
-          <th class="p-2.5">Ghi Chú</th>
+          ${dynamicThs}
           <th class="p-2.5 text-center w-20">Thao Tác</th>
         </tr>
       `;
     }
 
-    // 3. Filter & Render Rows
+    // 3. Filter across ALL dynamic columns & Render Rows
     const tbody = document.getElementById('sheetTableBody');
     const rows = Array.isArray(activeSheet.rows) ? activeSheet.rows : [];
     const q = (sheetSearchQuery || '').toLowerCase().trim();
 
     const filteredRows = rows.filter(r => {
       if (!q) return true;
-      return (
-        (r.label || '').toLowerCase().includes(q) ||
-        (r.username || '').toLowerCase().includes(q) ||
-        (r.recovery || '').toLowerCase().includes(q) ||
-        (r.status || '').toLowerCase().includes(q) ||
-        (r.note || '').toLowerCase().includes(q)
-      );
+      for (const col of columns) {
+        const val = r[col.id];
+        if (val !== null && val !== undefined && String(val).toLowerCase().includes(q)) {
+          return true;
+        }
+      }
+      if (r.twofa && String(r.twofa).toLowerCase().includes(q)) return true;
+      return false;
     });
 
     if (tbody) {
       if (filteredRows.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="8" class="text-center py-8 text-slate-500 text-xs">
+            <td colspan="${colSpan}" class="text-center py-8 text-slate-500 text-xs">
               ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "+ Thêm Dòng" để tạo.'}
             </td>
           </tr>
         `;
       } else {
         tbody.innerHTML = filteredRows.map((r, idx) => {
-          const isPwVisible = visiblePasswords.has(r.id);
-          const pwDisplay = r.password ? (isPwVisible ? escapeHtml(r.password) : '••••••••') : '<span class="text-slate-600 italic">Trống</span>';
-          
-          let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">${escapeHtml(r.status || 'Live')}</span>`;
-          if (r.status === 'Live') {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Live</span>`;
-          } else if (r.status === 'Die') {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">🔴 Die</span>`;
-          } else if (r.status === 'Sai Pass') {
-            statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">🟡 Sai Pass</span>`;
-          }
+          const rowIdEsc = escapeHtml(r.id);
+          const cellsHtml = columns.map((col, colIdx) => renderSheetCellHtml(r, col, colIdx)).join('');
 
           return `
             <tr class="hover:bg-slate-800/40 transition">
               <td class="p-2.5 text-center text-slate-500 font-mono text-[11px]">${idx + 1}</td>
-              <td class="p-2.5 font-medium text-slate-200">
-                <div class="max-w-[160px] truncate" title="${escapeHtml(r.label || '')}">${escapeHtml(r.label || '—')}</div>
-              </td>
-              <td class="p-2.5 font-mono text-[11px] text-emerald-300">
-                <div class="flex items-center gap-1.5 max-w-[200px]">
-                  <span class="truncate" title="${escapeHtml(r.username || '')}">${escapeHtml(r.username || '—')}</span>
-                  ${r.username ? `<button onclick="copySheetCellText('${escapeHtml(r.username)}', 'Tài khoản')" class="text-slate-400 hover:text-white p-1" title="Sao chép"><i data-lucide="copy" class="w-3 h-3"></i></button>` : ''}
-                </div>
-              </td>
-              <td class="p-2.5 font-mono text-[11px] text-slate-300">
-                <div class="flex items-center gap-1.5">
-                  <span>${pwDisplay}</span>
-                  ${r.password ? `
-                    <button onclick="togglePasswordVisibility('${r.id}')" class="text-slate-400 hover:text-white p-1" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
-                      <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
-                    </button>
-                    <button onclick="copySheetCellText('${escapeHtml(r.password)}', 'Mật khẩu')" class="text-slate-400 hover:text-white p-1" title="Sao chép">
-                      <i data-lucide="copy" class="w-3 h-3"></i>
-                    </button>
-                  ` : ''}
-                </div>
-              </td>
-              <td class="p-2.5 text-slate-400 text-[11px]">
-                <div class="max-w-[160px] truncate" title="${escapeHtml(r.recovery || '')}">${escapeHtml(r.recovery || '—')}</div>
-              </td>
-              <td class="p-2.5 text-center">${statusBadge}</td>
-              <td class="p-2.5 text-slate-400 text-[11px]">
-                <div class="max-w-[180px] truncate" title="${escapeHtml(r.note || '')}">${escapeHtml(r.note || '—')}</div>
-              </td>
+              ${cellsHtml}
               <td class="p-2.5 text-center">
                 <div class="flex items-center justify-center gap-1">
-                  <button onclick="editSheetRow('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
+                  <button type="button" data-edit-row="${rowIdEsc}" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  <button onclick="deleteSheetRowConfirm('${r.id}')" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
+                  <button type="button" data-delete-row="${rowIdEsc}" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -1790,10 +2629,10 @@ function renderSheetsView() {
     if (tbody) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" class="text-center py-8 text-rose-400 text-xs">
+          <td colspan="${colSpan}" class="text-center py-8 text-rose-400 text-xs">
             <div class="flex flex-col items-center gap-2">
               <p>Đã xảy ra lỗi khi tải dữ liệu bảng tính.</p>
-              <button onclick="loadAndRenderSheetsTab()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold">
+              <button type="button" onclick="loadAndRenderSheetsTab()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold">
                 Thử tải lại dữ liệu
               </button>
             </div>
@@ -1802,82 +2641,158 @@ function renderSheetsView() {
       `;
     }
   } finally {
-    lucide.createIcons();
+    refreshIcons();
   }
 }
 
 window.selectSheetTab = function(sheetId) {
   sheetsData.activeSheetId = sheetId;
-  saveLocalSheetsData();
+  saveLocalSheetsData(false);
   renderSheetsView();
 };
 
 window.copySheetCellText = function(text, label) {
-  navigator.clipboard.writeText(text).then(() => {
-    showToast(`Đã sao chép ${label}!`, 'success');
-  }).catch(() => {
-    showToast('Không thể sao chép tự động', 'info');
-  });
+  copyTextToClipboard(text, label);
 };
 
-window.togglePasswordVisibility = function(rowId) {
-  if (visiblePasswords.has(rowId)) {
-    visiblePasswords.delete(rowId);
+window.togglePasswordVisibility = function(pwKey) {
+  if (visiblePasswords.has(pwKey)) {
+    visiblePasswords.delete(pwKey);
   } else {
-    visiblePasswords.add(rowId);
+    visiblePasswords.add(pwKey);
   }
   renderSheetsView();
 };
 
+function renderDynamicSheetRowFields(row = null) {
+  const container = document.getElementById('dynamicSheetRowFields');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const activeSheet = getActiveSheet();
+  if (!activeSheet) return;
+
+  const baseCols = getResolvedColumns(activeSheet);
+  const fields = baseCols.map(c => ({ ...c }));
+
+  const hasTwofa = fields.some(c => c.id === 'twofa' || c.type === '2fa');
+  const needsTwofa = !hasTwofa && (
+    activeSheet.id === 'sheet_fb' ||
+    activeSheet.id === 'sheet_gmail' ||
+    activeSheet.showActions === true
+  );
+  if (needsTwofa) {
+    fields.push({ id: 'twofa', name: 'Mã 2FA (nếu có)', type: '2fa' });
+  }
+
+  const standardStatuses = [
+    { value: 'Live', label: '🟢 Live (Hoạt động tốt)' },
+    { value: 'Đang dùng', label: '🔵 Đang dùng' },
+    { value: 'Chờ nuôi', label: '🟡 Chờ nuôi' },
+    { value: 'Checkpoint', label: '🟠 Checkpoint' },
+    { value: 'Die', label: '🔴 Die (Bị khóa)' },
+    { value: 'Sai Pass', label: '🟡 Sai Pass' },
+    { value: 'Chờ Duyệt', label: '⚪ Chờ Duyệt' },
+    { value: 'Cần Check', label: '🟠 Cần Check' },
+    { value: '', label: '— Trống —' }
+  ];
+
+  fields.forEach(col => {
+    const wrapper = document.createElement('div');
+    const fieldId = `dynSheetField_${col.id}`;
+    const labelEl = document.createElement('label');
+    labelEl.className = 'block text-xs font-semibold text-slate-300 mb-1';
+    labelEl.setAttribute('for', fieldId);
+    labelEl.textContent = col.name || col.id;
+    wrapper.appendChild(labelEl);
+
+    const rawVal = row ? row[col.id] : undefined;
+    const currentVal = (rawVal === null || rawVal === undefined) ? '' : String(rawVal);
+    const colType = col.type || 'text';
+
+    let control;
+    if (colType === 'status') {
+      control = document.createElement('select');
+      control.className = 'w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500';
+      const targetVal = row ? currentVal : 'Live';
+      let matched = false;
+      standardStatuses.forEach(optDef => {
+        const opt = document.createElement('option');
+        opt.value = optDef.value;
+        opt.textContent = optDef.label;
+        if (optDef.value === targetVal) {
+          opt.selected = true;
+          matched = true;
+        }
+        control.appendChild(opt);
+      });
+      if (!matched && targetVal) {
+        const customOpt = document.createElement('option');
+        customOpt.value = targetVal;
+        customOpt.textContent = targetVal;
+        customOpt.selected = true;
+        control.appendChild(customOpt);
+      }
+    } else if (colType === 'textarea' || col.id === 'note' || col.id === 'col_note') {
+      control = document.createElement('textarea');
+      control.rows = 2;
+      control.placeholder = `Nhập ${(col.name || col.id).toLowerCase()}...`;
+      control.className = 'w-full bg-slate-950 text-xs text-white rounded-xl p-2.5 border border-white/10 focus:outline-none focus:border-emerald-500';
+      control.value = currentVal;
+    } else if (colType === 'number') {
+      control = document.createElement('input');
+      control.type = 'number';
+      control.step = 'any';
+      control.placeholder = '0';
+      control.className = 'w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500 font-mono';
+      control.value = currentVal;
+    } else if (colType === 'link') {
+      control = document.createElement('input');
+      control.type = 'url';
+      control.placeholder = 'https://...';
+      control.className = 'w-full bg-slate-950 text-xs text-cyan-300 rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500 font-mono';
+      control.value = currentVal;
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.placeholder = `Nhập ${(col.name || col.id).toLowerCase()}...`;
+      const isMono = colType === 'password' || colType === 'copy_text' || colType === '2fa' || col.id === 'username';
+      control.className = `w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500${isMono ? ' font-mono' : ''}`;
+      control.value = currentVal;
+    }
+
+    control.id = fieldId;
+    control.setAttribute('data-sheet-col', col.id);
+    wrapper.appendChild(control);
+    container.appendChild(wrapper);
+  });
+}
+
 window.editSheetRow = function(rowId) {
-  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+  const activeSheet = getActiveSheet();
   if (!activeSheet) return;
   const row = (activeSheet.rows || []).find(r => r.id === rowId);
   if (!row) return;
-
-  document.getElementById('sheetRowId').value = row.id;
-  document.getElementById('rowInputLabel').value = row.label || '';
-  document.getElementById('rowInputUsername').value = row.username || '';
-  document.getElementById('rowInputPassword').value = row.password || '';
-  document.getElementById('rowInputTwofa').value = row.twofa || '';
-  document.getElementById('rowInputRecovery').value = row.recovery || '';
-  document.getElementById('rowInputStatus').value = row.status || 'Live';
-  document.getElementById('rowInputNote').value = row.note || '';
-
-  const deleteBtn = document.getElementById('btnDeleteSheetRow');
-  if (deleteBtn) deleteBtn.classList.remove('hidden');
-
-  const titleEl = document.getElementById('modalSheetRowTitle');
-  if (titleEl) titleEl.innerHTML = '<i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i><span>Chỉnh sửa thông tin</span>';
-
-  const modal = document.getElementById('modalSheetRow');
-  if (modal) {
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-  }
-  lucide.createIcons();
+  openSheetRowModal(row);
 };
 
 window.deleteSheetRowConfirm = function(rowId) {
   if (!confirm('Bạn có chắc muốn xóa dòng này không?')) return;
-  const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+  const activeSheet = getActiveSheet();
   if (!activeSheet) return;
 
   activeSheet.rows = (activeSheet.rows || []).filter(r => r.id !== rowId);
+  activeSheet.updatedAt = Date.now();
   triggerCloudSheetsSync();
   renderSheetsView();
   showToast('Đã xóa dòng thành công!', 'info');
 };
 
 function openSheetRowModal(row = null) {
-  document.getElementById('sheetRowId').value = row ? row.id : '';
-  document.getElementById('rowInputLabel').value = row ? (row.label || '') : '';
-  document.getElementById('rowInputUsername').value = row ? (row.username || '') : '';
-  document.getElementById('rowInputPassword').value = row ? (row.password || '') : '';
-  document.getElementById('rowInputTwofa').value = row ? (row.twofa || '') : '';
-  document.getElementById('rowInputRecovery').value = row ? (row.recovery || '') : '';
-  document.getElementById('rowInputStatus').value = row ? (row.status || 'Live') : 'Live';
-  document.getElementById('rowInputNote').value = row ? (row.note || '') : '';
+  const rowIdInput = document.getElementById('sheetRowId');
+  if (rowIdInput) rowIdInput.value = row ? row.id : '';
+
+  renderDynamicSheetRowFields(row);
 
   const deleteBtn = document.getElementById('btnDeleteSheetRow');
   if (deleteBtn) {
@@ -1887,7 +2802,7 @@ function openSheetRowModal(row = null) {
 
   const titleEl = document.getElementById('modalSheetRowTitle');
   if (titleEl) {
-    titleEl.innerHTML = row 
+    titleEl.innerHTML = row
       ? '<i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i><span>Chỉnh sửa thông tin</span>'
       : '<i data-lucide="plus-circle" class="w-4 h-4 text-emerald-400"></i><span>Thêm Dòng Mới</span>';
   }
@@ -1896,9 +2811,12 @@ function openSheetRowModal(row = null) {
   if (modal) {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    document.getElementById('rowInputLabel').focus();
+    const firstInput = document.querySelector('#dynamicSheetRowFields [data-sheet-col]');
+    if (firstInput && typeof firstInput.focus === 'function') {
+      firstInput.focus();
+    }
   }
-  lucide.createIcons();
+  refreshIcons();
 }
 
 function closeSheetRowModal() {
@@ -1930,8 +2848,9 @@ function closeAddSheetModal() {
 
 function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
+  if (!container) return;
   const toast = document.createElement('div');
-  
+
   let bgClasses = 'bg-slate-900 border-white/10 text-slate-200';
   let iconName = 'info';
 
@@ -1944,10 +2863,10 @@ function showToast(message, type = 'info') {
   }
 
   toast.className = `flex items-center gap-2.5 px-4 py-2.5 rounded-xl border shadow-xl text-xs font-medium transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto ${bgClasses}`;
-  toast.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 flex-shrink-0"></i> <span>${message}</span>`;
+  toast.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 flex-shrink-0"></i> <span>${escapeHtml(message)}</span>`;
 
   container.appendChild(toast);
-  lucide.createIcons();
+  refreshIcons();
 
   // Trigger animation
   requestAnimationFrame(() => {
@@ -1972,42 +2891,148 @@ document.addEventListener('DOMContentLoaded', () => {
   loadLocalData();
   loadLocalSheetsData();
 
-  // 2. Setup Date Chips navigation
-  const today = getTodayDateStr();
-  document.getElementById('btnDatePrev').onclick = () => {
-    selectedDate = addDaysToDateStr(today, -1);
-    renderApp();
-  };
-  document.getElementById('btnDateToday').onclick = () => {
-    selectedDate = today;
-    renderApp();
-  };
-  document.getElementById('btnDateTomorrow').onclick = () => {
-    selectedDate = addDaysToDateStr(today, 1);
-    renderApp();
-  };
-  document.getElementById('btnDatePlus2').onclick = () => {
-    selectedDate = addDaysToDateStr(today, 2);
-    renderApp();
-  };
-  document.getElementById('btnDatePlus3').onclick = () => {
-    selectedDate = addDaysToDateStr(today, 3);
-    renderApp();
-  };
-  document.getElementById('btnJumpToToday').onclick = () => {
-    selectedDate = today;
-    renderApp();
-  };
+  // 2. Setup Checklist Sub-mode Switcher (Theo ngày vs Toàn bộ)
+  const btnModeDay = document.getElementById('btnChecklistModeDay');
+  const btnModeAll = document.getElementById('btnChecklistModeAll');
+  if (btnModeDay) btnModeDay.onclick = () => setChecklistViewMode('day');
+  if (btnModeAll) btnModeAll.onclick = () => setChecklistViewMode('all');
+
+  // 2.1 Setup Date Step Navigation & Jump to Today
+  const btnStepPrev = document.getElementById('btnDateStepPrev');
+  const btnStepNext = document.getElementById('btnDateStepNext');
+  const btnJumpToday = document.getElementById('btnJumpToToday');
+
+  if (btnStepPrev) {
+    btnStepPrev.onclick = () => {
+      selectedDate = addDaysToDateStr(selectedDate, -1);
+      renderApp();
+    };
+  }
+  if (btnStepNext) {
+    btnStepNext.onclick = () => {
+      selectedDate = addDaysToDateStr(selectedDate, 1);
+      renderApp();
+    };
+  }
+  if (btnJumpToday) {
+    btnJumpToday.onclick = () => {
+      selectedDate = getTodayDateStr();
+      renderApp();
+    };
+  }
 
   // Custom date picker input
   const datePickerInput = document.getElementById('inputCustomDatePicker');
-  datePickerInput.value = selectedDate;
-  datePickerInput.addEventListener('change', (e) => {
-    if (e.target.value) {
-      selectedDate = e.target.value;
-      renderApp();
+  if (datePickerInput) {
+    datePickerInput.value = selectedDate;
+    datePickerInput.addEventListener('change', (e) => {
+      if (e.target.value) {
+        selectedDate = e.target.value;
+        renderApp();
+      }
+    });
+  }
+
+  // 2.2 All Tasks Mode Filters & Search
+  const filterMappings = [
+    { id: 'btnAllFilterAll', status: 'all' },
+    { id: 'btnAllFilterPending', status: 'pending' },
+    { id: 'btnAllFilterOverdue', status: 'overdue' },
+    { id: 'btnAllFilterDone', status: 'completed' }
+  ];
+  filterMappings.forEach(item => {
+    const el = document.getElementById(item.id);
+    if (el) {
+      el.onclick = () => {
+        allFilterStatus = item.status;
+        renderAllTasksView();
+        refreshIcons();
+      };
     }
   });
+
+  document.querySelectorAll('[data-all-range]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      allTimeRange = btn.getAttribute('data-all-range') || 'all';
+      renderAllTasksView();
+      refreshIcons();
+    });
+  });
+
+  const inputAllSearch = document.getElementById('inputAllTasksSearch');
+  const btnClearAllSearch = document.getElementById('btnClearAllSearch');
+  if (inputAllSearch) {
+    inputAllSearch.addEventListener('input', (e) => {
+      const val = e.target.value;
+      if (btnClearAllSearch) btnClearAllSearch.classList.toggle('hidden', !val);
+      if (allSearchDebounceTimer) clearTimeout(allSearchDebounceTimer);
+      allSearchDebounceTimer = setTimeout(() => {
+        allSearchQuery = val;
+        renderAllTasksView();
+        refreshIcons();
+      }, 120);
+    });
+  }
+  if (btnClearAllSearch && inputAllSearch) {
+    btnClearAllSearch.onclick = () => {
+      if (allSearchDebounceTimer) clearTimeout(allSearchDebounceTimer);
+      inputAllSearch.value = '';
+      allSearchQuery = '';
+      renderAllTasksView();
+      refreshIcons();
+      inputAllSearch.focus();
+    };
+  }
+
+  const btnAllSort = document.getElementById('btnAllTasksSort');
+  if (btnAllSort) {
+    btnAllSort.onclick = () => {
+      allSortOrder = allSortOrder === 'desc' ? 'asc' : 'desc';
+      renderAllTasksView();
+      refreshIcons();
+    };
+  }
+
+  const btnMoveAllOverdueFromAll = document.getElementById('btnMoveAllOverdueFromAll');
+  if (btnMoveAllOverdueFromAll) {
+    btnMoveAllOverdueFromAll.onclick = moveAllOverdueToToday;
+  }
+
+  const btnResetAllFilters = document.getElementById('btnResetAllFilters');
+  if (btnResetAllFilters) {
+    btnResetAllFilters.onclick = () => {
+      if (allSearchDebounceTimer) clearTimeout(allSearchDebounceTimer);
+      allFilterStatus = 'all';
+      allTimeRange = 'all';
+      allSearchQuery = '';
+      if (inputAllSearch) inputAllSearch.value = '';
+      renderAllTasksView();
+      refreshIcons();
+    };
+  }
+
+  // 2.3 History View Filters
+  const selectHistoryMonth = document.getElementById('selectHistoryMonth');
+  if (selectHistoryMonth) {
+    selectHistoryMonth.addEventListener('change', (e) => {
+      historyMonthFilter = e.target.value || 'all';
+      renderHistoryView();
+      refreshIcons();
+    });
+  }
+
+  const inputHistorySearch = document.getElementById('inputHistorySearch');
+  if (inputHistorySearch) {
+    inputHistorySearch.addEventListener('input', (e) => {
+      const val = e.target.value;
+      if (historySearchDebounceTimer) clearTimeout(historySearchDebounceTimer);
+      historySearchDebounceTimer = setTimeout(() => {
+        historySearchQuery = val;
+        renderHistoryView();
+        refreshIcons();
+      }, 120);
+    });
+  }
 
   // 3. Tab buttons
   document.getElementById('tabBtnChecklist').onclick = () => switchTab('checklist');
@@ -2017,12 +3042,65 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tabAutoFbBtn) tabAutoFbBtn.onclick = () => switchTab('autofb');
   document.getElementById('tabBtnHistory').onclick = () => switchTab('history');
 
-  // 3.1 Sheet listeners
+  // 3.1 Sheet listeners (debounced search + delegated tab & cell actions)
   const inputSearch = document.getElementById('inputSearchSheetRows');
   if (inputSearch) {
     inputSearch.addEventListener('input', (e) => {
-      sheetSearchQuery = e.target.value;
-      renderSheetsView();
+      const val = e.target.value;
+      if (sheetSearchDebounceTimer) clearTimeout(sheetSearchDebounceTimer);
+      sheetSearchDebounceTimer = setTimeout(() => {
+        sheetSearchQuery = val;
+        renderSheetsView();
+      }, 150);
+    });
+  }
+
+  const sheetTabsList = document.getElementById('sheetTabsList');
+  if (sheetTabsList) {
+    sheetTabsList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-sheet-id]');
+      if (!btn) return;
+      const sheetId = btn.getAttribute('data-sheet-id');
+      if (sheetId) selectSheetTab(sheetId);
+    });
+  }
+
+  const sheetTableBody = document.getElementById('sheetTableBody');
+  if (sheetTableBody) {
+    sheetTableBody.addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('[data-copy-row][data-copy-col]');
+      if (copyBtn) {
+        const rowId = copyBtn.getAttribute('data-copy-row');
+        const colId = copyBtn.getAttribute('data-copy-col');
+        const activeSheet = getActiveSheet();
+        if (!activeSheet) return;
+        const row = (activeSheet.rows || []).find(r => r.id === rowId);
+        if (!row) return;
+        const colMeta = getResolvedColumns(activeSheet).find(c => c.id === colId);
+        const label = colMeta ? colMeta.name : colId;
+        copyTextToClipboard(row[colId] ?? '', label);
+        return;
+      }
+
+      const togglePwBtn = e.target.closest('[data-toggle-pw]');
+      if (togglePwBtn) {
+        const pwKey = togglePwBtn.getAttribute('data-toggle-pw');
+        if (pwKey) togglePasswordVisibility(pwKey);
+        return;
+      }
+
+      const editBtn = e.target.closest('[data-edit-row]');
+      if (editBtn) {
+        const rowId = editBtn.getAttribute('data-edit-row');
+        if (rowId) editSheetRow(rowId);
+        return;
+      }
+
+      const deleteBtn = e.target.closest('[data-delete-row]');
+      if (deleteBtn) {
+        const rowId = deleteBtn.getAttribute('data-delete-row');
+        if (rowId) deleteSheetRowConfirm(rowId);
+      }
     });
   }
 
@@ -2035,53 +3113,43 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnNewSheet = document.getElementById('btnAddNewSheet');
   if (btnNewSheet) btnNewSheet.onclick = () => openAddSheetModal();
 
-  // Sheet Row Modal Form submit
+  // Sheet Row Modal Form submit (collect dynamic fields & preserve non-column fields like profileId)
   const formSheetRow = document.getElementById('formSheetRow');
   if (formSheetRow) {
     formSheetRow.addEventListener('submit', (e) => {
       e.preventDefault();
-      const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+      const activeSheet = getActiveSheet();
       if (!activeSheet) return;
       if (!Array.isArray(activeSheet.rows)) activeSheet.rows = [];
 
       const rowId = document.getElementById('sheetRowId').value;
-      const label = document.getElementById('rowInputLabel').value.trim();
-      const username = document.getElementById('rowInputUsername').value.trim();
-      const password = document.getElementById('rowInputPassword').value.trim();
-      const twofa = document.getElementById('rowInputTwofa').value.trim();
-      const recovery = document.getElementById('rowInputRecovery').value.trim();
-      const status = document.getElementById('rowInputStatus').value;
-      const note = document.getElementById('rowInputNote').value.trim();
+      const fieldEls = document.querySelectorAll('#dynamicSheetRowFields [data-sheet-col]');
+      const collectedValues = {};
+      fieldEls.forEach(el => {
+        const colId = el.getAttribute('data-sheet-col');
+        if (colId) {
+          collectedValues[colId] = typeof el.value === 'string' ? el.value.trim() : el.value;
+        }
+      });
 
+      const now = Date.now();
       if (rowId) {
-        // Update existing row
         const row = activeSheet.rows.find(r => r.id === rowId);
         if (row) {
-          row.label = label;
-          row.username = username;
-          row.password = password;
-          row.twofa = twofa;
-          row.recovery = recovery;
-          row.status = status;
-          row.note = note;
-          row.updatedAt = Date.now();
+          Object.assign(row, collectedValues);
+          row.updatedAt = now;
         }
       } else {
-        // Add new row
         const newRow = {
-          id: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          label,
-          username,
-          password,
-          twofa,
-          recovery,
-          status,
-          note,
-          createdAt: Date.now()
+          id: `row_${now}_${Math.random().toString(36).substring(2, 6)}`,
+          ...collectedValues,
+          createdAt: now,
+          updatedAt: now
         };
         activeSheet.rows.unshift(newRow);
       }
 
+      activeSheet.updatedAt = now;
       closeSheetRowModal();
       triggerCloudSheetsSync();
       renderSheetsView();
@@ -2096,9 +3164,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const rowId = document.getElementById('sheetRowId').value;
       if (!rowId) return;
       if (!confirm('Bạn có chắc muốn xóa dòng này không?')) return;
-      const activeSheet = sheetsData.sheets.find(s => s.id === sheetsData.activeSheetId) || sheetsData.sheets[0];
+      const activeSheet = getActiveSheet();
       if (!activeSheet) return;
       activeSheet.rows = (activeSheet.rows || []).filter(r => r.id !== rowId);
+      activeSheet.updatedAt = Date.now();
       closeSheetRowModal();
       triggerCloudSheetsSync();
       renderSheetsView();
@@ -2120,25 +3189,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const sheetIcon = document.getElementById('inputNewSheetIcon').value.trim() || '📄';
       if (!sheetName) return;
 
-      const newSheetId = `sheet_${Date.now()}`;
+      const now = Date.now();
+      const newSheetId = `sheet_${now}`;
       const newSheet = {
         id: newSheetId,
         name: sheetName,
         icon: sheetIcon,
-        columns: [
-          { id: 'label', name: 'Tên / Nhãn', width: 170, type: 'text' },
-          { id: 'username', name: 'Tài khoản / Mail', width: 230, type: 'copy_text' },
-          { id: 'password', name: 'Mật khẩu', width: 165, type: 'password' },
-          { id: 'recovery', name: 'Mail khôi phục / SĐT', width: 185, type: 'text' },
-          { id: 'status', name: 'Trạng thái', width: 120, type: 'status' },
-          { id: 'note', name: 'Ghi chú', width: 220, type: 'text' }
-        ],
-        rows: []
+        columns: DEFAULT_SHEET_COLUMNS.map(col => ({ ...col })),
+        rows: [],
+        updatedAt: now
       };
 
       if (!Array.isArray(sheetsData.sheets)) sheetsData.sheets = [];
       sheetsData.sheets.push(newSheet);
       sheetsData.activeSheetId = newSheetId;
+      sheetsData.updatedAt = now;
 
       closeAddSheetModal();
       triggerCloudSheetsSync();
@@ -2182,7 +3247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputTitle.focus();
   });
 
-  // 5. Bulk action: Move all to tomorrow
+  // 5. Bulk action: dynamic handler also kept up to date by renderTasksForSelectedDate()
   document.getElementById('btnMoveAllToTomorrow').onclick = moveAllPendingToTomorrow;
 
   // 6. Toggle completed list view
@@ -2193,7 +3258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const completedList = document.getElementById('listCompletedTasks');
     completedList.classList.toggle('hidden', !showCompletedList);
     iconToggleCompleted.setAttribute('data-lucide', showCompletedList ? 'chevron-down' : 'chevron-right');
-    lucide.createIcons();
+    refreshIcons();
   };
 
   // 7. Edit Modal Form
@@ -2223,7 +3288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isPassword = inputToken.type === 'password';
     inputToken.type = isPassword ? 'text' : 'password';
     document.getElementById('iconTokenEye').setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
-    lucide.createIcons();
+    refreshIcons();
   };
 
   // Copy 1-Click URL button
@@ -2231,11 +3296,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('inputOneClickUrl');
     input.select();
     input.setSelectionRange(0, 99999);
-    navigator.clipboard.writeText(input.value).then(() => {
-      showToast('Đã chép Link đăng nhập 1-click!', 'success');
-    }).catch(() => {
-      showToast('Vui lòng bôi đen và chép link thủ công.', 'info');
-    });
+    copyTextToClipboard(input.value, 'Link đăng nhập 1-click');
   };
 
   // Save Config Form
@@ -2308,6 +3369,11 @@ document.addEventListener('DOMContentLoaded', () => {
       syncDebounceTimer = null;
       pushCloudData(false, { keepalive: true });
     }
+    if (sheetDebounceTimer) {
+      clearTimeout(sheetDebounceTimer);
+      sheetDebounceTimer = null;
+      pushCloudSheetsData(false, { keepalive: true });
+    }
   };
 
   document.addEventListener('visibilitychange', () => {
@@ -2321,7 +3387,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 9. Initial Render
-  renderApp();
+  setChecklistViewMode('day');
 
   // 10. Background initial Cloud Sync fetch
   fetchCloudData(false);

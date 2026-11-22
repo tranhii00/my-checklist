@@ -182,6 +182,22 @@
     <!-- TAB 1: CHECKLIST VIEW -->
     <div id="viewChecklist" class="flex flex-col gap-4">
 
+      <!-- Checklist Sub-mode Switcher: Theo ngày vs Toàn bộ -->
+      <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/5 shadow-inner gap-1">
+        <button type="button" id="btnChecklistModeDay" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30 active:scale-[0.99]">
+          <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>
+          <span>Theo ngày</span>
+        </button>
+        <button type="button" id="btnChecklistModeAll" class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 active:scale-[0.99]">
+          <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+          <span>Toàn bộ</span>
+          <span id="badgeAllTasksTotal" class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10 leading-none">0</span>
+        </button>
+      </div>
+
+      <!-- SECTION: THEO NGÀY (DAY SECTION) -->
+      <div id="checklistDaySection" class="flex flex-col gap-4">
+
       <!-- Today Banner & Date Focus Header -->
       <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-4 border border-white/10 shadow-xl relative overflow-hidden">
         <div class="absolute -right-8 -top-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -216,48 +232,24 @@
         </div>
       </div>
 
-      <!-- Date Selector Bar: [◀ Hôm qua] [Hôm nay] [Ngày mai] [+2 ngày] [+3 ngày] [📅 Lịch] -->
+      <!-- Date Selector Bar: [◀] [6-Day Sliding Window] [▶] [📅 Lịch] -->
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
           <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> Chọn ngày xem việc:</span>
-          <button id="btnJumpToToday" class="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 active:scale-95 transition">
+          <button type="button" id="btnJumpToToday" class="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 active:scale-95 transition">
             Về Hôm nay
           </button>
         </div>
 
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          <!-- Button: Hôm qua -->
-          <button id="btnDatePrev" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
-            <span class="text-[10px] text-slate-400 font-medium">Hôm qua</span>
-            <span id="dateTextPrev" class="text-xs font-bold text-slate-200 mt-0.5">14/11</span>
-          </button>
+        <div class="flex items-center gap-1.5">
+          <button id="btnDateStepPrev" type="button" class="flex-shrink-0 w-8 h-[56px] rounded-xl bg-slate-900 border border-white/10 hover:border-slate-600 hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 text-xs font-bold" title="Lùi 1 ngày" aria-label="Lùi 1 ngày">◀</button>
 
-          <!-- Button: Hôm nay -->
-          <button id="btnDateToday" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3.5 rounded-xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-300 font-bold shadow-md shadow-emerald-950/40 min-w-[82px] active:scale-95 transition">
-            <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">Hôm nay</span>
-            <span id="dateTextToday" class="text-xs font-extrabold text-white mt-0.5">15/11</span>
-          </button>
+          <div id="dateChipsStrip" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 flex-1"></div>
 
-          <!-- Button: Ngày mai -->
-          <button id="btnDateTomorrow" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
-            <span class="text-[10px] text-slate-400 font-medium">Ngày mai</span>
-            <span id="dateTextTomorrow" class="text-xs font-bold text-slate-200 mt-0.5">16/11</span>
-          </button>
-
-          <!-- Button: +2 ngày -->
-          <button id="btnDatePlus2" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
-            <span id="dateDayNamePlus2" class="text-[10px] text-slate-400 font-medium">+2 ngày</span>
-            <span id="dateTextPlus2" class="text-xs font-bold text-slate-200 mt-0.5">17/11</span>
-          </button>
-
-          <!-- Button: +3 ngày -->
-          <button id="btnDatePlus3" class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 transition active:scale-95 min-w-[76px]">
-            <span id="dateDayNamePlus3" class="text-[10px] text-slate-400 font-medium">+3 ngày</span>
-            <span id="dateTextPlus3" class="text-xs font-bold text-slate-200 mt-0.5">18/11</span>
-          </button>
+          <button id="btnDateStepNext" type="button" class="flex-shrink-0 w-8 h-[56px] rounded-xl bg-slate-900 border border-white/10 hover:border-slate-600 hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 text-xs font-bold" title="Tiến 1 ngày" aria-label="Tiến 1 ngày">▶</button>
 
           <!-- Button: Date Picker (Lịch) -->
-          <label class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[76px] relative" title="Chọn ngày bất kỳ trên lịch">
+          <label class="date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[68px] sm:min-w-[76px] relative" title="Chọn ngày bất kỳ trên lịch">
             <span class="text-[10px] text-cyan-400 font-semibold flex items-center gap-1">
               <i data-lucide="calendar-days" class="w-3 h-3"></i> Lịch
             </span>
@@ -266,6 +258,9 @@
           </label>
         </div>
       </div>
+
+      <!-- Overdue Unfinished Past Tasks Banner -->
+      <div id="overdueBanner" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 sm:p-3.5 flex flex-col gap-2.5 shadow-lg"></div>
 
       <!-- Quick Add Task Card for Selected Date -->
       <div class="bg-slate-900/90 rounded-2xl p-3 sm:p-4 border border-white/10 shadow-lg">
@@ -366,6 +361,83 @@
         </div>
       </div>
 
+      </div><!-- /#checklistDaySection -->
+
+      <!-- SECTION: TOÀN BỘ CÔNG VIỆC (ALL TASKS VIEW) -->
+      <div id="checklistAllSection" class="hidden flex flex-col gap-4">
+        <!-- 4 Clickable KPI Filter Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button type="button" id="btnAllFilterAll" class="flex flex-col items-start justify-between p-3 rounded-2xl bg-emerald-600/20 border-2 border-emerald-500 text-left transition active:scale-95 shadow-md">
+            <span class="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">Tất cả</span>
+            <span id="allCountTotal" class="text-xl font-extrabold text-white mt-1 leading-none">0</span>
+          </button>
+
+          <button type="button" id="btnAllFilterPending" class="flex flex-col items-start justify-between p-3 rounded-2xl bg-slate-900/90 border border-white/10 hover:border-amber-500/40 text-left transition active:scale-95">
+            <span class="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Chưa xong</span>
+            <span id="allCountPending" class="text-xl font-extrabold text-white mt-1 leading-none">0</span>
+          </button>
+
+          <button type="button" id="btnAllFilterOverdue" class="flex flex-col items-start justify-between p-3 rounded-2xl bg-slate-900/90 border border-white/10 hover:border-rose-500/40 text-left transition active:scale-95">
+            <span class="text-[11px] font-semibold text-rose-400 uppercase tracking-wider">Quá hạn</span>
+            <span id="allCountOverdue" class="text-xl font-extrabold text-white mt-1 leading-none">0</span>
+          </button>
+
+          <button type="button" id="btnAllFilterDone" class="flex flex-col items-start justify-between p-3 rounded-2xl bg-slate-900/90 border border-white/10 hover:border-cyan-500/40 text-left transition active:scale-95">
+            <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">Đã xong</span>
+            <span id="allCountDone" class="text-xl font-extrabold text-white mt-1 leading-none">0</span>
+          </button>
+        </div>
+
+        <!-- Search, Sort, Move Overdue & Time Range Toolbar -->
+        <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/10 shadow-lg flex flex-col gap-2.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="relative flex-1 min-w-[180px]">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
+              <input type="text" id="inputAllTasksSearch" placeholder="Tìm theo tên việc, ghi chú, ngày..." class="w-full bg-slate-950/80 text-xs text-white placeholder-slate-500 rounded-xl pl-8 pr-8 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 transition">
+              <button type="button" id="btnClearAllSearch" class="hidden absolute right-2 top-1.5 p-1 text-slate-400 hover:text-white rounded-md" title="Xóa tìm kiếm">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <button type="button" id="btnAllTasksSort" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-xs font-semibold text-slate-200 transition active:scale-95">
+              <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-cyan-400"></i>
+              <span id="labelAllTasksSort">Mới nhất trước</span>
+            </button>
+
+            <button type="button" id="btnMoveAllOverdueFromAll" class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold text-amber-300 transition active:scale-95">
+              <i data-lucide="calendar-check" class="w-3.5 h-3.5"></i>
+              <span>Dời quá hạn về hôm nay</span>
+            </button>
+          </div>
+
+          <!-- Time Range Filter Pills -->
+          <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+            <button type="button" data-all-range="all" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white transition active:scale-95">Mọi lúc</button>
+            <button type="button" data-all-range="past" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95">Quá khứ</button>
+            <button type="button" data-all-range="upcoming" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95">Hôm nay &amp; Tới</button>
+            <button type="button" data-all-range="7d" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95">7 ngày qua</button>
+            <button type="button" data-all-range="30d" class="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95">30 ngày qua</button>
+          </div>
+        </div>
+
+        <!-- Grouped Tasks List -->
+        <div id="containerAllTasksGrouped" class="flex flex-col gap-3">
+          <!-- Dynamically grouped by date -->
+        </div>
+
+        <!-- Empty State for All Tasks View -->
+        <div id="emptyAllTasksState" class="hidden py-10 px-4 rounded-2xl border border-dashed border-white/10 text-center bg-slate-900/30">
+          <div class="w-12 h-12 rounded-full bg-slate-800/80 flex items-center justify-center mx-auto mb-2 text-slate-400">
+            <i data-lucide="search-x" class="w-6 h-6 text-slate-400"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-200">Không tìm thấy công việc nào</p>
+          <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Thử thay đổi bộ lọc trạng thái, khoảng thời gian hoặc từ khóa tìm kiếm.</p>
+          <button type="button" id="btnResetAllFilters" class="mt-3 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-emerald-500/20 transition active:scale-95">
+            Đặt lại bộ lọc
+          </button>
+        </div>
+      </div>
+
     </div>
 
     <!-- TAB 2: QUẢN LÝ BẢNG TÍNH (SHEETS) -->
@@ -413,7 +485,7 @@
 
       <!-- Responsive Sheet Table -->
       <div class="bg-slate-900/90 rounded-2xl border border-white/10 shadow-xl overflow-hidden flex flex-col">
-        <div class="overflow-x-auto max-h-[60vh] max-h-[60dvh] overflow-y-auto">
+        <div class="overflow-x-auto max-h-[60vh] max-h-[60dvh] overflow-y-auto" style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
           <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
             <thead id="sheetTableHead" class="sticky top-0 bg-slate-950 border-b border-white/10 text-slate-400 font-semibold text-[11px] uppercase tracking-wider z-10">
               <!-- Dynamically populated column headers -->
@@ -484,6 +556,17 @@
             Lịch sử theo ngày
           </h3>
           <span class="text-xs text-slate-400">Tự động lưu trữ vĩnh viễn</span>
+        </div>
+
+        <!-- Compact Filter Row -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900/70 p-2.5 rounded-xl border border-white/5">
+          <select id="selectHistoryMonth" class="bg-slate-950/90 text-xs text-slate-200 rounded-lg px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 sm:w-48">
+            <option value="all">Tất cả các tháng</option>
+          </select>
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
+            <input type="text" id="inputHistorySearch" placeholder="Tìm trong lịch sử..." class="w-full bg-slate-950/90 text-xs text-white placeholder-slate-500 rounded-lg pl-8 pr-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 transition">
+          </div>
         </div>
 
         <div id="containerHistoryDays" class="flex flex-col gap-3">
@@ -564,49 +647,8 @@
 
       <form id="formSheetRow" class="flex flex-col gap-3">
         <input type="hidden" id="sheetRowId">
-        
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Tên / Nhãn</label>
-          <input type="text" id="rowInputLabel" placeholder="Ví dụ: Tài khoản chính, Page 1..." class="w-full bg-slate-950 text-xs text-white rounded-xl px-3.5 py-2.5 border border-white/10 focus:outline-none focus:border-emerald-500">
-        </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1">Tài khoản / Mail / SĐT</label>
-            <input type="text" id="rowInputUsername" placeholder="username / email" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 font-mono">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1">Mật khẩu</label>
-            <input type="text" id="rowInputPassword" placeholder="password" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 font-mono">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1">Mã 2FA (nếu có)</label>
-            <input type="text" id="rowInputTwofa" placeholder="Khóa bảo mật 2FA 32 ký tự" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500 font-mono">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1">Mail khôi phục / SĐT</label>
-            <input type="text" id="rowInputRecovery" placeholder="recovery email/phone" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500">
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Trạng thái</label>
-          <select id="rowInputStatus" class="w-full bg-slate-950 text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-emerald-500">
-            <option value="Live">🟢 Live (Hoạt động tốt)</option>
-            <option value="Die">🔴 Die (Bị khóa / Checkpoint)</option>
-            <option value="Sai Pass">🟡 Sai Pass</option>
-            <option value="Chờ Duyệt">⚪ Chờ Duyệt</option>
-            <option value="Cần Check">🟠 Cần Check</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Ghi chú</label>
-          <textarea id="rowInputNote" rows="2" placeholder="Ghi chú thêm..." class="w-full bg-slate-950 text-xs text-white rounded-xl p-2.5 border border-white/10 focus:outline-none focus:border-emerald-500"></textarea>
-        </div>
+        <div id="dynamicSheetRowFields" class="flex flex-col gap-3"></div>
 
         <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
           <button type="button" id="btnDeleteSheetRow" class="px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition hidden">
@@ -785,7 +827,7 @@
   </footer>
 
   <!-- Main JavaScript App -->
-  <script src="app.js?v=20261119_v1"></script>
+  <script src="app.js?v=20261122_v1"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>

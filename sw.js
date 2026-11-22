@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-checklist-v1.3.3';
+const CACHE_NAME = 'my-checklist-v1.4.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
