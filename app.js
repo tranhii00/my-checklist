@@ -526,27 +526,27 @@ function setSyncStatusUI(status, message) {
 
   if (status === 'syncing') {
     textEl.textContent = 'Đang lưu...';
-    dotEl.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+    dotEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-amber-400 animate-pulse';
     spinEl.classList.add('animate-spin');
-    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> Đang đồng bộ...';
+    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="flex-shrink-0 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Đang đồng bộ...';
   } else if (status === 'synced') {
     textEl.textContent = 'Đã đồng bộ';
-    dotEl.className = 'w-2 h-2 rounded-full bg-emerald-400';
+    dotEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400';
     spinEl.classList.remove('animate-spin');
     const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     cloudConfig.lastSyncTime = timeStr;
-    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Đã kết nối & Đồng bộ';
+    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400"></span> Đã kết nối & Đồng bộ';
     if (modalLastSyncEl) modalLastSyncEl.textContent = timeStr + ' (' + message + ')';
   } else if (status === 'offline') {
     textEl.textContent = 'Ngoại tuyến';
-    dotEl.className = 'w-2 h-2 rounded-full bg-slate-500';
+    dotEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-slate-500';
     spinEl.classList.remove('animate-spin');
-    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500"></span> Chế độ Offline';
+    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="flex-shrink-0 w-2 h-2 rounded-full bg-slate-500"></span> Chế độ Offline';
   } else if (status === 'error') {
     textEl.textContent = 'Chưa đồng bộ';
-    dotEl.className = 'w-2 h-2 rounded-full bg-rose-500';
+    dotEl.className = 'flex-shrink-0 w-2 h-2 rounded-full bg-rose-500';
     spinEl.classList.remove('animate-spin');
-    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span> ' + (message || 'Lỗi kết nối');
+    if (modalStatusEl) modalStatusEl.innerHTML = '<span class="flex-shrink-0 w-2 h-2 rounded-full bg-rose-500"></span> ' + (message || 'Lỗi kết nối');
   }
 }
 
@@ -1005,16 +1005,16 @@ function setChecklistViewMode(mode) {
   if (daySection) daySection.classList.toggle('hidden', checklistViewMode !== 'day');
   if (allSection) allSection.classList.toggle('hidden', checklistViewMode !== 'all');
 
-  const activePillClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30 active:scale-[0.99]';
-  const inactivePillClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 active:scale-[0.99]';
+  const activePillClass = 'flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]';
+  const inactivePillClass = 'flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]';
 
   if (btnDay) btnDay.className = checklistViewMode === 'day' ? activePillClass : inactivePillClass;
   if (btnAll) btnAll.className = checklistViewMode === 'all' ? activePillClass : inactivePillClass;
   if (badgeAll) {
     badgeAll.textContent = String((appData.tasks || []).length);
     badgeAll.className = checklistViewMode === 'all'
-      ? 'text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-800/80 text-emerald-100 border border-emerald-400/30 leading-none'
-      : 'text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10 leading-none';
+      ? 'tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-800/80 text-emerald-100 border border-emerald-400/30 leading-none'
+      : 'tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10 leading-none';
   }
 
   if (checklistViewMode === 'all') {
@@ -1073,9 +1073,9 @@ function renderDateHeader() {
   dayProgressBarEl.style.width = `${percent}%`;
 
   if (percent === 100 && total > 0) {
-    dayProgressBarEl.className = 'bg-gradient-to-r from-emerald-400 to-emerald-500 h-full rounded-full transition-all duration-300 shadow-md shadow-emerald-500/50';
+    dayProgressBarEl.className = 'bg-gradient-to-r from-emerald-400 to-emerald-500 h-full rounded-full transition-[width] duration-300 ease-out';
   } else {
-    dayProgressBarEl.className = 'bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-all duration-300';
+    dayProgressBarEl.className = 'bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-[width] duration-300 ease-out';
   }
 }
 
@@ -1127,27 +1127,27 @@ function renderDateChips() {
       btn.setAttribute('data-chip-date', dateStr);
 
       if (isSelected) {
-        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-emerald-600/25 border-2 border-emerald-400 text-emerald-300 font-bold shadow-lg shadow-emerald-950/60 min-w-[72px] active:scale-95 transition';
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center h-[54px] min-w-[66px] px-2.5 py-1.5 rounded-xl whitespace-nowrap bg-emerald-600/20 border border-emerald-400 ring-1 ring-emerald-400/30 text-emerald-300 font-bold active:scale-95 transition-colors';
       } else if (isToday) {
-        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 transition active:scale-95 min-w-[70px]';
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center h-[54px] min-w-[66px] px-2.5 py-1.5 rounded-xl whitespace-nowrap bg-slate-900/90 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 transition-colors active:scale-95';
       } else {
-        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl bg-slate-900 border border-white/5 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition active:scale-95 min-w-[70px]';
+        btn.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center h-[54px] min-w-[66px] px-2.5 py-1.5 rounded-xl whitespace-nowrap bg-slate-900/90 border border-white/[0.08] hover:border-slate-600 text-slate-400 hover:text-slate-200 transition-colors active:scale-95';
       }
 
       const labelSpan = document.createElement('span');
-      labelSpan.className = `text-[10px] font-semibold leading-tight ${isSelected ? 'text-emerald-300' : (isToday ? 'text-emerald-400' : 'text-slate-400')}`;
+      labelSpan.className = `text-[10px] font-semibold leading-tight whitespace-nowrap ${isSelected ? 'text-emerald-300' : (isToday ? 'text-emerald-400' : 'text-slate-400')}`;
       labelSpan.textContent = topLabel;
 
       const dateSpan = document.createElement('span');
-      dateSpan.className = `text-xs font-bold mt-0.5 leading-tight ${isSelected ? 'text-white' : 'text-slate-200'}`;
+      dateSpan.className = `tabular-nums text-xs font-bold mt-0.5 leading-tight whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-200'}`;
       dateSpan.textContent = formatShortVNDate(dateStr);
 
       const badgeSpan = document.createElement('span');
       if (stats.pending > 0) {
-        badgeSpan.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 leading-tight';
+        badgeSpan.className = 'tabular-nums mt-0.5 text-[9px] font-bold px-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 leading-tight';
         badgeSpan.textContent = String(stats.pending);
       } else if (stats.total > 0) {
-        badgeSpan.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 leading-tight';
+        badgeSpan.className = 'mt-0.5 text-[9px] font-bold px-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 leading-tight';
         badgeSpan.textContent = '✓';
       } else {
         badgeSpan.className = 'mt-0.5 text-[9px] opacity-0 leading-tight';
@@ -1167,10 +1167,13 @@ function renderDateChips() {
       if (isSelected) activeEl = btn;
     });
 
-    if (activeEl && typeof activeEl.scrollIntoView === 'function') {
-      try {
-        activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      } catch (_) {}
+    if (activeEl) {
+      const centerActiveChip = () => {
+        const targetLeft = activeEl.offsetLeft - (strip.clientWidth - activeEl.offsetWidth) / 2;
+        strip.scrollLeft = Math.max(0, targetLeft);
+      };
+      centerActiveChip();
+      requestAnimationFrame(centerActiveChip);
     }
   }
 
@@ -1182,10 +1185,10 @@ function renderDateChips() {
   if (customChip) {
     if (!isWithinDefaultWindow || !stripDates.includes(selectedDate)) {
       customChip.textContent = formatShortVNDate(selectedDate);
-      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-2.5 sm:px-3 rounded-xl bg-cyan-600/25 border-2 border-cyan-400 text-cyan-300 font-bold shadow-lg min-w-[68px] sm:min-w-[76px] relative cursor-pointer transition active:scale-95';
+      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center h-[54px] px-2 rounded-xl bg-cyan-600/20 border border-cyan-400 ring-1 ring-cyan-400/30 text-cyan-300 font-bold min-w-[60px] whitespace-nowrap relative cursor-pointer transition-colors active:scale-95';
     } else {
       customChip.textContent = 'Chọn ngày';
-      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 border border-white/10 hover:border-emerald-500/50 cursor-pointer transition active:scale-95 min-w-[68px] sm:min-w-[76px] relative';
+      customChip.parentElement.className = 'date-chip flex-shrink-0 flex flex-col items-center justify-center h-[54px] px-2 rounded-xl bg-slate-900/90 border border-white/[0.08] hover:border-emerald-500/50 cursor-pointer transition-colors active:scale-95 min-w-[60px] whitespace-nowrap relative';
     }
   }
 }
@@ -1227,14 +1230,14 @@ function renderOverdueBanner() {
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'flex items-center gap-2 text-xs text-amber-200 font-semibold';
-  titleWrap.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 flex-shrink-0"></i><span>Còn <strong>${overdueTasks.length}</strong> việc chưa xong từ ngày trước</span>`;
+  titleWrap.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 flex-shrink-0"></i><span>Còn <strong class="tabular-nums">${overdueTasks.length}</strong> việc chưa xong từ ngày trước</span>`;
 
   const btnGroup = document.createElement('div');
   btnGroup.className = 'flex items-center gap-1.5 flex-shrink-0';
 
   const btnViewOverdue = document.createElement('button');
   btnViewOverdue.type = 'button';
-  btnViewOverdue.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 transition active:scale-95';
+  btnViewOverdue.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/30 transition-colors active:scale-95 whitespace-nowrap';
   btnViewOverdue.textContent = 'Xem quá hạn';
   btnViewOverdue.onclick = () => {
     allFilterStatus = 'overdue';
@@ -1244,7 +1247,7 @@ function renderOverdueBanner() {
 
   const btnMoveToday = document.createElement('button');
   btnMoveToday.type = 'button';
-  btnMoveToday.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition active:scale-95 shadow-sm';
+  btnMoveToday.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors active:scale-95 whitespace-nowrap';
   btnMoveToday.title = 'Dời tất cả việc quá hạn về hôm nay';
   btnMoveToday.textContent = 'Về hôm nay';
   btnMoveToday.onclick = () => moveAllOverdueToToday();
@@ -1259,7 +1262,7 @@ function renderOverdueBanner() {
   overdueDates.forEach(dateStr => {
     const pill = document.createElement('button');
     pill.type = 'button';
-    pill.className = 'flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-950/70 hover:bg-slate-900 text-amber-300 border border-amber-500/20 transition active:scale-95';
+    pill.className = 'tabular-nums flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-950/70 hover:bg-slate-900 text-amber-300 border border-amber-500/20 transition-colors active:scale-95 whitespace-nowrap';
     pill.textContent = `${formatShortVNDate(dateStr)} (${countByDate[dateStr]})`;
     pill.title = `Xem ngày ${formatFullVNDate(dateStr)}`;
     pill.onclick = () => {
@@ -1332,19 +1335,19 @@ function renderTasksForSelectedDate() {
 
 function createTaskCardElement(task, isCompleted, options = {}) {
   const card = document.createElement('div');
-  card.className = `task-card group flex items-start gap-3 p-3.5 rounded-2xl border transition-all duration-200 ${
+  card.className = `task-card group flex items-start gap-3 p-3.5 rounded-2xl border transition-colors duration-150 ${
     isCompleted 
-      ? 'bg-slate-900/40 border-white/5 opacity-75 hover:opacity-100' 
-      : 'bg-slate-900/90 border-white/10 hover:border-slate-600 shadow-md'
+      ? 'bg-slate-900/45 border-white/[0.06] opacity-75 hover:opacity-100' 
+      : 'bg-slate-900/90 border-white/[0.08] hover:border-slate-600'
   }`;
 
-  // Big Rounded Checkbox (24x24px with generous tap area)
+  // Big Rounded Checkbox (28x28px with generous tap area)
   const checkboxWrapper = document.createElement('button');
   checkboxWrapper.type = 'button';
-  checkboxWrapper.className = 'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-90 mt-0.5';
+  checkboxWrapper.className = 'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors duration-150 active:scale-90 mt-0.5';
   
   if (isCompleted) {
-    checkboxWrapper.className += ' bg-emerald-500 border border-emerald-400 text-white shadow-md shadow-emerald-900/40 check-pop';
+    checkboxWrapper.className += ' bg-emerald-500 border border-emerald-400 text-white check-pop';
     checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>';
   } else {
     checkboxWrapper.className += ' border-2 border-slate-600 hover:border-emerald-400 bg-slate-950/60 hover:bg-emerald-500/10 text-transparent';
@@ -1370,7 +1373,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
 
   // Metadata badges line
   const metaLine = document.createElement('div');
-  metaLine.className = 'flex flex-wrap items-center gap-2 text-[11px] text-slate-400';
+  metaLine.className = 'flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400';
 
   const today = getTodayDateStr();
   const taskDate = getTaskDate(task);
@@ -1385,22 +1388,22 @@ function createTaskCardElement(task, isCompleted, options = {}) {
 
   if (task.time) {
     const timeBadge = document.createElement('span');
-    timeBadge.className = 'inline-flex items-center gap-1 font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20';
+    timeBadge.className = 'tabular-nums inline-flex items-center gap-1 font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20';
     timeBadge.innerHTML = `<i data-lucide="clock" class="w-3 h-3"></i> ${escapeHtml(task.time)}`;
     metaLine.appendChild(timeBadge);
   }
 
   if (isCompleted && task.completedAt) {
     const completedBadge = document.createElement('span');
-    completedBadge.className = 'inline-flex items-center gap-1 font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20';
+    completedBadge.className = 'tabular-nums inline-flex items-center gap-1 font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20';
     completedBadge.innerHTML = `<i data-lucide="check-check" class="w-3 h-3"></i> Xong lúc ${escapeHtml(formatTime(task.completedAt))}`;
     metaLine.appendChild(completedBadge);
   }
 
   if (task.note) {
     const noteBadge = document.createElement('span');
-    noteBadge.className = 'inline-flex items-center gap-1 text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md max-w-[200px] truncate';
-    noteBadge.innerHTML = `<i data-lucide="file-text" class="w-3 h-3 text-blue-400"></i> ${escapeHtml(task.note)}`;
+    noteBadge.className = 'inline-flex items-center gap-1 text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md max-w-[180px] sm:max-w-[220px] truncate';
+    noteBadge.innerHTML = `<i data-lucide="file-text" class="w-3 h-3 text-blue-400 flex-shrink-0"></i> ${escapeHtml(task.note)}`;
     metaLine.appendChild(noteBadge);
   }
 
@@ -1417,7 +1420,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
     const moveBtn = document.createElement('button');
     moveBtn.type = 'button';
     if (isOverdue) {
-      moveBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition flex items-center gap-1 active:scale-95';
+      moveBtn.className = 'px-2 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-colors flex items-center gap-1 active:scale-95 whitespace-nowrap';
       moveBtn.title = 'Dời công việc về hôm nay';
       moveBtn.innerHTML = '<i data-lucide="calendar-check" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Về hôm nay</span>';
       moveBtn.onclick = (e) => {
@@ -1425,7 +1428,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
         moveTaskToToday(task.id);
       };
     } else {
-      moveBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-white/5 transition flex items-center gap-1 active:scale-95';
+      moveBtn.className = 'px-2 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-white/[0.06] transition-colors flex items-center gap-1 active:scale-95 whitespace-nowrap';
       moveBtn.title = 'Dời công việc sang ngày mai';
       moveBtn.innerHTML = '<i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Dời mai</span>';
       moveBtn.onclick = (e) => {
@@ -1439,7 +1442,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   // Edit Button
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
-  editBtn.className = 'p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition active:scale-95';
+  editBtn.className = 'p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors active:scale-95';
   editBtn.title = 'Chỉnh sửa';
   editBtn.innerHTML = '<i data-lucide="edit-2" class="w-3.5 h-3.5"></i>';
   editBtn.onclick = (e) => {
@@ -1451,7 +1454,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   // Delete Button
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
-  deleteBtn.className = 'p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition active:scale-95';
+  deleteBtn.className = 'p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors active:scale-95';
   deleteBtn.title = 'Xóa';
   deleteBtn.innerHTML = '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>';
   deleteBtn.onclick = (e) => {
@@ -1493,16 +1496,16 @@ function renderAllTasksView() {
 
   // Highlight active KPI filter card
   const filterButtons = [
-    { id: 'btnAllFilterAll', key: 'all', active: 'bg-emerald-600/20 border-2 border-emerald-500 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-emerald-500/40' },
-    { id: 'btnAllFilterPending', key: 'pending', active: 'bg-amber-600/20 border-2 border-amber-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-amber-500/40' },
-    { id: 'btnAllFilterOverdue', key: 'overdue', active: 'bg-rose-600/20 border-2 border-rose-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-rose-500/40' },
-    { id: 'btnAllFilterDone', key: 'completed', active: 'bg-cyan-600/20 border-2 border-cyan-400 shadow-md', inactive: 'bg-slate-900/90 border border-white/10 hover:border-cyan-500/40' }
+    { id: 'btnAllFilterAll', key: 'all', active: 'bg-emerald-600/20 border border-emerald-500 ring-1 ring-emerald-500/40', inactive: 'bg-slate-900/90 border border-white/[0.08] hover:border-emerald-500/40' },
+    { id: 'btnAllFilterPending', key: 'pending', active: 'bg-amber-600/20 border border-amber-400 ring-1 ring-amber-400/40', inactive: 'bg-slate-900/90 border border-white/[0.08] hover:border-amber-500/40' },
+    { id: 'btnAllFilterOverdue', key: 'overdue', active: 'bg-rose-600/20 border border-rose-400 ring-1 ring-rose-400/40', inactive: 'bg-slate-900/90 border border-white/[0.08] hover:border-rose-500/40' },
+    { id: 'btnAllFilterDone', key: 'completed', active: 'bg-cyan-600/20 border border-cyan-400 ring-1 ring-cyan-400/40', inactive: 'bg-slate-900/90 border border-white/[0.08] hover:border-cyan-500/40' }
   ];
   filterButtons.forEach(item => {
     const btn = document.getElementById(item.id);
     if (!btn) return;
     const isSelected = allFilterStatus === item.key;
-    btn.className = `flex flex-col items-start justify-between p-3 rounded-2xl text-left transition active:scale-95 ${isSelected ? item.active : item.inactive}`;
+    btn.className = `flex flex-col items-start justify-between p-3 rounded-2xl text-left transition-colors active:scale-95 ${isSelected ? item.active : item.inactive}`;
   });
 
   // Update time range buttons
@@ -1510,8 +1513,8 @@ function renderAllTasksView() {
     const rangeVal = btn.getAttribute('data-all-range');
     const isActive = rangeVal === allTimeRange;
     btn.className = isActive
-      ? 'flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white transition active:scale-95'
-      : 'flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/5 transition active:scale-95';
+      ? 'flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white transition-colors active:scale-95'
+      : 'flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800/80 text-slate-300 hover:text-white border border-white/[0.06] transition-colors active:scale-95';
   });
 
   const labelSortEl = document.getElementById('labelAllTasksSort');
@@ -1635,10 +1638,10 @@ function renderAllTasksView() {
 
     const ratioPill = document.createElement('span');
     if (done === total && total > 0) {
-      ratioPill.className = 'text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      ratioPill.className = 'tabular-nums text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap';
       ratioPill.textContent = `✓ ${done}/${total}`;
     } else {
-      ratioPill.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-white/10';
+      ratioPill.className = 'tabular-nums text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-white/[0.08] whitespace-nowrap';
       ratioPill.textContent = `${done}/${total}`;
     }
     right.appendChild(ratioPill);
@@ -1646,7 +1649,7 @@ function renderAllTasksView() {
     if (dateStr !== 'unknown') {
       const btnGoDay = document.createElement('button');
       btnGoDay.type = 'button';
-      btnGoDay.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white border border-white/10 transition active:scale-95';
+      btnGoDay.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white border border-white/[0.08] transition-colors active:scale-95 whitespace-nowrap';
       btnGoDay.textContent = 'Xem ngày này';
       btnGoDay.onclick = (e) => {
         e.stopPropagation();
@@ -1780,20 +1783,20 @@ function renderHistoryView() {
       : allDayTasks;
 
     const card = document.createElement('div');
-    card.className = 'bg-slate-900/90 rounded-2xl p-4 border border-white/10 shadow-md flex flex-col gap-3 transition hover:border-slate-600';
+    card.className = 'bg-slate-900/90 rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] flex flex-col gap-3 transition-colors hover:border-slate-600';
 
     const header = document.createElement('div');
     header.className = 'flex flex-wrap items-center justify-between gap-2';
 
     const left = document.createElement('div');
-    left.className = 'flex items-center gap-2.5 min-w-0';
+    left.className = 'flex items-center gap-2 min-w-0';
 
     const badgeRelation = document.createElement('span');
-    badgeRelation.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 flex-shrink-0';
+    badgeRelation.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 flex-shrink-0 whitespace-nowrap';
     badgeRelation.textContent = getRelativeDateLabel(dateStr);
 
     const dateTitle = document.createElement('span');
-    dateTitle.className = 'text-sm font-bold text-white truncate';
+    dateTitle.className = 'tabular-nums text-sm font-bold text-white truncate';
     dateTitle.textContent = formatFullVNDate(dateStr);
 
     left.appendChild(badgeRelation);
@@ -1804,16 +1807,16 @@ function renderHistoryView() {
 
     const pill = document.createElement('span');
     if (percent === 100) {
-      pill.className = 'text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1';
+      pill.className = 'tabular-nums text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 whitespace-nowrap';
       pill.innerHTML = `✓ ${completed}/${total} (100%)`;
     } else {
-      pill.className = 'text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-white/10';
+      pill.className = 'tabular-nums text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-white/[0.08] whitespace-nowrap';
       pill.textContent = `${completed}/${total} việc (${percent}%)`;
     }
 
     const btnGoToDate = document.createElement('button');
     btnGoToDate.type = 'button';
-    btnGoToDate.className = 'px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition';
+    btnGoToDate.className = 'px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors whitespace-nowrap';
     btnGoToDate.textContent = 'Xem ngày này';
     btnGoToDate.onclick = () => {
       selectedDate = dateStr;
@@ -1880,7 +1883,7 @@ function renderHistoryView() {
       const timeStr = t.time || t.dueTime || (t.completedAt ? formatTime(t.completedAt) : '');
       if (timeStr) {
         const timeEl = document.createElement('span');
-        timeEl.className = 'text-[11px] text-slate-500 font-mono';
+        timeEl.className = 'tabular-nums text-[11px] text-slate-500 font-mono';
         timeEl.textContent = timeStr;
         rowRight.appendChild(timeEl);
       }
@@ -2020,11 +2023,35 @@ async function checkTunnelStatusDirectly(manual = false) {
   }
 }
 
+function showAutoFbIframeLoader() {
+  const loader = document.getElementById('autoFbIframeLoader');
+  if (loader) {
+    loader.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+  }
+}
+
+window.handleAutoFbIframeLoad = function() {
+  const iframe = document.getElementById('autoFbIframe');
+  const loader = document.getElementById('autoFbIframeLoader');
+  if (!loader) return;
+  // Ignore blank initial load when iframe src is not yet pointed at the tunnel
+  if (iframe && (!iframe.getAttribute('src') || iframe.src === 'about:blank')) {
+    return;
+  }
+  loader.classList.add('opacity-0', 'pointer-events-none');
+  setTimeout(() => {
+    if (loader.classList.contains('opacity-0')) {
+      loader.classList.add('hidden');
+    }
+  }, 220);
+};
+
 window.reloadAutoFbIframe = function() {
   const iframe = document.getElementById('autoFbIframe');
   if (iframe) {
     const src = iframe.src;
-    iframe.src = '';
+    showAutoFbIframeLoader();
+    iframe.src = 'about:blank';
     setTimeout(() => { iframe.src = src; }, 100);
     showToast('Đang nạp lại bảng điều khiển FB...', 'info');
   }
@@ -2041,8 +2068,8 @@ function switchTab(tabName) {
   const tabBtnAutoFb = document.getElementById('tabBtnAutoFb');
   const tabBtnHistory = document.getElementById('tabBtnHistory');
 
-  const activeClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 bg-emerald-600 text-white shadow-md shadow-emerald-900/30';
-  const inactiveClass = 'flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
+  const activeClass = 'flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white';
+  const inactiveClass = 'flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60';
 
   if (viewChecklist) viewChecklist.classList.add('hidden');
   if (viewSheets) viewSheets.classList.add('hidden');
@@ -2057,6 +2084,9 @@ function switchTab(tabName) {
   if (tabName === 'checklist') {
     if (viewChecklist) viewChecklist.classList.remove('hidden');
     if (tabBtnChecklist) tabBtnChecklist.className = activeClass;
+    if (checklistViewMode === 'day') {
+      renderDateChips();
+    }
     if (autofbPollTimer) { clearInterval(autofbPollTimer); autofbPollTimer = null; }
   } else if (tabName === 'sheets') {
     if (viewSheets) viewSheets.classList.remove('hidden');
@@ -2107,29 +2137,29 @@ function renderAutoFbView() {
         <div id="autoFbWrapper" class="flex flex-col gap-2.5 w-full">
           <!-- SECTION 1: ONLINE (TOOLBAR + IFRAME) -->
           <div id="autoFbOnlineSection" class="${isLaptopActive ? '' : 'hidden'} flex flex-col gap-2.5 w-full">
-            <div class="bg-slate-900/90 rounded-2xl p-2.5 sm:p-3 border border-emerald-500/30 shadow-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div class="flex items-center gap-2.5">
-                <span class="relative flex h-3 w-3">
+            <div class="bg-slate-900/90 rounded-2xl p-3 sm:p-3.5 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="relative flex h-2.5 w-2.5 flex-shrink-0">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-white text-xs sm:text-sm">Laptop Online (Đã kết nối)</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">● ONLINE</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-white text-xs sm:text-sm whitespace-nowrap">Laptop Online</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/25 whitespace-nowrap">● Đã kết nối</span>
                   </div>
-                  <p class="text-[11px] text-slate-400">Giao diện điều khiển Auto Facebook từ xa</p>
+                  <p class="text-[11px] text-slate-400 truncate mt-0.5">Giao diện điều khiển Auto Facebook từ xa</p>
                 </div>
               </div>
 
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-shrink-0">
                 <button 
                   type="button"
                   onclick="reloadAutoFbIframe()" 
-                  class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition active:scale-95" 
+                  class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/[0.08] flex items-center gap-1.5 text-xs font-semibold transition-colors active:scale-95 whitespace-nowrap" 
                   title="Nạp lại bảng điều khiển"
                 >
-                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5 flex-shrink-0"></i>
                   <span>Nạp lại</span>
                 </button>
 
@@ -2138,10 +2168,10 @@ function renderAutoFbView() {
                   href="${escapeHtml(targetUrl)}" 
                   target="_blank" 
                   rel="noreferrer" 
-                  class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold flex items-center gap-1.5 text-xs transition shadow-md shadow-emerald-950/40 active:scale-95"
+                  class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1.5 text-xs transition-colors active:scale-95 whitespace-nowrap"
                   title="Mở tab mới toàn màn hình"
                 >
-                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                  <i data-lucide="external-link" class="w-3.5 h-3.5 flex-shrink-0"></i>
                   <span>Toàn màn hình</span>
                 </a>
 
@@ -2149,7 +2179,8 @@ function renderAutoFbView() {
                   type="button"
                   id="btnRefreshAutoFbState"
                   onclick="checkTunnelStatusDirectly(true)" 
-                  class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition active:scale-95 border border-white/5" 
+                  aria-label="Kiểm tra lại kết nối"
+                  class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors active:scale-95 border border-white/[0.08] flex-shrink-0" 
                   title="Kiểm tra lại kết nối"
                 >
                   <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -2157,12 +2188,22 @@ function renderAutoFbView() {
               </div>
             </div>
 
-            <!-- Khung nhúng iframe với chiều cao cố định chống giật Safari iOS -->
-            <div class="relative w-full rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950" style="height: 72vh; height: 72dvh; min-height: 480px; contain: paint;">
+            <!-- Khung nhúng iframe với overlay chờ tải mượt mà & chiều cao cố định chống giật Safari iOS -->
+            <div class="relative w-full rounded-2xl overflow-hidden border border-white/[0.1] bg-slate-950" style="height: 72vh; height: 72dvh; min-height: 540px; contain: paint;">
+              <div id="autoFbIframeLoader" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/95 px-6 text-center transition-opacity duration-200">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                  <i data-lucide="loader-2" class="w-6 h-6 animate-spin"></i>
+                </div>
+                <div class="flex flex-col gap-1 max-w-xs">
+                  <p class="text-sm font-semibold text-slate-100">Đang tải giao diện điều khiển Laptop...</p>
+                  <p class="text-xs text-slate-400">Đang kết nối an toàn tới phiên làm việc Auto_Post_FB</p>
+                </div>
+              </div>
               <iframe 
                 id="autoFbIframe"
                 src="${isLaptopActive && targetUrl ? escapeHtml(targetUrl) : ''}" 
-                class="w-full h-full border-0 bg-slate-950 block"
+                onload="handleAutoFbIframeLoad()"
+                class="relative z-0 w-full h-full border-0 bg-slate-950 block"
                 allow="clipboard-read; clipboard-write; fullscreen"
                 sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
                 title="Bảng Điều Khiển Auto Facebook"
@@ -2171,14 +2212,14 @@ function renderAutoFbView() {
           </div>
 
           <!-- SECTION 2: OFFLINE (THÔNG BÁO LAPTOP TẮT) -->
-          <div id="autoFbOfflineSection" class="${isLaptopActive ? 'hidden' : ''} bg-slate-900/90 rounded-2xl p-6 border border-white/10 shadow-xl flex flex-col items-center justify-center text-center gap-4">
-            <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
-              <i data-lucide="laptop" class="w-8 h-8 text-amber-400"></i>
+          <div id="autoFbOfflineSection" class="${isLaptopActive ? 'hidden' : ''} bg-slate-900/90 rounded-2xl p-5 sm:p-6 border border-white/[0.08] flex flex-col items-center justify-center text-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <i data-lucide="laptop" class="w-7 h-7 text-amber-400"></i>
             </div>
 
-            <div class="flex items-center gap-2">
-              <h3 class="text-base font-bold text-slate-200">Laptop đang tắt / Tool FB chưa mở</h3>
-              <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-bold border border-slate-600">○ LAPTOP TẮT</span>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <h3 class="text-base font-bold text-slate-100">Laptop đang tắt / Tool FB chưa mở</h3>
+              <span class="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold border border-white/[0.08] whitespace-nowrap">○ LAPTOP TẮT</span>
             </div>
 
             <p class="text-xs text-slate-300 max-w-md leading-relaxed">
@@ -2186,7 +2227,7 @@ function renderAutoFbView() {
               Khi bạn mở Laptop và chạy <strong class="text-amber-400 font-semibold">Auto_Post_FB</strong>, tab này sẽ <strong class="text-cyan-400 font-semibold">tự động kết nối</strong> để bạn điều khiển từ xa!
             </p>
 
-            <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/5 w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
+            <div class="bg-slate-950/80 rounded-xl p-3.5 border border-white/[0.06] w-full max-w-md text-left text-xs text-slate-300 flex flex-col gap-2">
               <div class="flex items-center gap-2 text-cyan-400 font-semibold">
                 <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
                 <span>Các bước kết nối:</span>
@@ -2202,10 +2243,10 @@ function renderAutoFbView() {
               <button 
                 type="button"
                 onclick="checkTunnelStatusDirectly(true)" 
-                class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition active:scale-95 border border-white/10"
+                class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-colors active:scale-95 border border-white/[0.08]"
               >
                 <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                <span>Bấm kiểm tra kết nối lại ngay</span>
+                <span>Kiểm tra kết nối lại ngay</span>
               </button>
             </div>
           </div>
@@ -2232,6 +2273,7 @@ function renderAutoFbView() {
         // ONLY update src if empty or target origin changed (never re-trigger reload if already loaded!)
         const targetClean = targetUrl.split('?')[0];
         if (!iframe.src || iframe.src === 'about:blank' || !iframe.src.includes(targetClean)) {
+          showAutoFbIframeLoader();
           iframe.src = targetUrl;
         }
       }
@@ -2339,15 +2381,15 @@ function renderSheetCellHtml(row, col, colIndex) {
       : '<span class="text-slate-600 italic">Trống</span>';
 
     return `
-      <td class="p-2.5 font-mono text-[11px] text-slate-300">
-        <div class="flex items-center gap-1.5">
-          <span>${pwDisplay}</span>
+      <td class="px-3 py-2.5 font-mono text-[11px] text-slate-300">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="max-w-[125px] sm:max-w-[165px] truncate">${pwDisplay}</span>
           ${hasVal ? `
-            <button type="button" data-toggle-pw="${pwKeyEsc}" class="text-slate-400 hover:text-white p-1 rounded" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
-              <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3 h-3"></i>
+            <button type="button" data-toggle-pw="${pwKeyEsc}" class="flex-shrink-0 text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors" title="${isPwVisible ? 'Ẩn' : 'Hiện'}">
+              <i data-lucide="${isPwVisible ? 'eye-off' : 'eye'}" class="w-3.5 h-3.5"></i>
             </button>
-            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded" title="Sao chép">
-              <i data-lucide="copy" class="w-3 h-3"></i>
+            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="flex-shrink-0 text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors" title="Sao chép">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
             </button>
           ` : ''}
         </div>
@@ -2357,12 +2399,12 @@ function renderSheetCellHtml(row, col, colIndex) {
 
   if (colType === '2fa') {
     return `
-      <td class="p-2.5 font-mono text-[11px] text-cyan-300">
-        <div class="flex items-center gap-1.5 max-w-[200px]">
+      <td class="px-3 py-2.5 font-mono text-[11px] text-cyan-300">
+        <div class="flex items-center gap-1.5 min-w-0">
           ${hasVal
-            ? `<span class="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>
-               <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép 2FA">
-                 <i data-lucide="copy" class="w-3 h-3"></i>
+            ? `<span class="max-w-[140px] sm:max-w-[175px] px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>
+               <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="flex-shrink-0 text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors" title="Sao chép 2FA">
+                 <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                </button>`
             : '<span class="text-slate-600">—</span>'}
         </div>
@@ -2371,20 +2413,20 @@ function renderSheetCellHtml(row, col, colIndex) {
   }
 
   if (colType === 'status') {
-    return `<td class="p-2.5 text-center">${getSheetStatusBadgeHtml(strVal)}</td>`;
+    return `<td class="px-3 py-2.5 text-center">${getSheetStatusBadgeHtml(strVal)}</td>`;
   }
 
   const isHttpLink = /^https?:\/\//i.test(trimmedVal);
   if (colType === 'link' || (colType === 'text' && isHttpLink)) {
     return `
-      <td class="p-2.5 text-[11px]">
-        <div class="flex items-center gap-1.5 max-w-[220px]">
+      <td class="px-3 py-2.5 text-[11px]">
+        <div class="flex items-center gap-1.5 min-w-0">
           ${hasVal
             ? (isHttpLink
-                ? `<a href="${escapeHtml(trimmedVal)}" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 underline truncate" title="${escapeHtml(trimmedVal)}">${escapeHtml(trimmedVal)}</a>`
-                : `<span class="text-slate-300 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>`) +
-              `<button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép link">
-                 <i data-lucide="copy" class="w-3 h-3"></i>
+                ? `<a href="${escapeHtml(trimmedVal)}" target="_blank" rel="noopener noreferrer" class="max-w-[140px] sm:max-w-[175px] text-cyan-400 hover:text-cyan-300 underline truncate" title="${escapeHtml(trimmedVal)}">${escapeHtml(trimmedVal)}</a>`
+                : `<span class="max-w-[140px] sm:max-w-[175px] text-slate-300 truncate" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</span>`) +
+              `<button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="flex-shrink-0 text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors" title="Sao chép link">
+                 <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                </button>`
             : '<span class="text-slate-600">—</span>'}
         </div>
@@ -2394,7 +2436,7 @@ function renderSheetCellHtml(row, col, colIndex) {
 
   if (colType === 'number') {
     return `
-      <td class="p-2.5 text-right font-mono tabular-nums text-[11px] text-slate-200">
+      <td class="px-3 py-2.5 text-right font-mono tabular-nums text-[11px] text-slate-200">
         ${hasVal ? escapeHtml(strVal) : '<span class="text-slate-600">—</span>'}
       </td>
     `;
@@ -2402,12 +2444,12 @@ function renderSheetCellHtml(row, col, colIndex) {
 
   if (colType === 'copy_text' || col.id === 'copy_text' || col.id === 'username') {
     return `
-      <td class="p-2.5 font-mono text-[11px] text-emerald-300">
-        <div class="flex items-center gap-1.5 max-w-[210px]">
-          <span class="truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</span>
+      <td class="px-3 py-2.5 font-mono text-[11px] text-emerald-300">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="max-w-[135px] sm:max-w-[175px] truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</span>
           ${hasVal ? `
-            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="text-slate-400 hover:text-white p-1 rounded flex-shrink-0" title="Sao chép">
-              <i data-lucide="copy" class="w-3 h-3"></i>
+            <button type="button" data-copy-row="${rowIdEsc}" data-copy-col="${colIdEsc}" class="flex-shrink-0 text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors" title="Sao chép">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
             </button>
           ` : ''}
         </div>
@@ -2416,11 +2458,20 @@ function renderSheetCellHtml(row, col, colIndex) {
   }
 
   const textToneClass = colIndex === 0 ? 'font-medium text-slate-200' : 'text-slate-300 text-[11px]';
+  const maxWidthClass = colIndex === 0 ? 'max-w-[115px] sm:max-w-[175px]' : 'max-w-[160px] sm:max-w-[175px]';
   return `
-    <td class="p-2.5 ${textToneClass}">
-      <div class="max-w-[210px] truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</div>
+    <td class="px-3 py-2.5 ${textToneClass}">
+      <div class="${maxWidthClass} truncate" title="${escapeHtml(strVal)}">${hasVal ? escapeHtml(strVal) : '—'}</div>
     </td>
   `;
+}
+
+function updateSheetScrollHint() {
+  const scrollWrap = document.getElementById('sheetTableScrollWrap');
+  const scrollHint = document.getElementById('sheetScrollHint');
+  if (!scrollWrap || !scrollHint) return;
+  const hasOverflow = scrollWrap.scrollWidth > scrollWrap.clientWidth + 4;
+  scrollHint.classList.toggle('hidden', !hasOverflow);
 }
 
 async function loadAndRenderSheetsTab() {
@@ -2519,7 +2570,7 @@ function renderSheetsView() {
       if (countEl) countEl.textContent = 'Chưa có dữ liệu trang tính';
       const tbody = document.getElementById('sheetTableBody');
       if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-slate-500 text-xs">Chưa có dữ liệu trang tính. Bấm "+ Thêm Sheet" để bắt đầu.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-slate-500 text-xs">Chưa có dữ liệu trang tính. Bấm "Thêm Sheet" để bắt đầu.</td></tr>`;
       }
       return;
     }
@@ -2530,18 +2581,18 @@ function renderSheetsView() {
       tabsContainer.innerHTML = sheetsData.sheets.map(sheet => {
         const isActive = sheet.id === activeSheet.id;
         const count = Array.isArray(sheet.rows) ? sheet.rows.length : 0;
-        const activeClass = 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-950/40 border-emerald-500';
-        const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/5';
+        const activeClass = 'bg-emerald-600 text-white font-semibold border-emerald-500';
+        const inactiveClass = 'bg-slate-800/80 text-slate-300 font-medium hover:bg-slate-700/80 border-white/[0.06]';
 
         return `
           <button
             type="button"
             data-sheet-id="${escapeHtml(sheet.id)}"
-            class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition active:scale-95 ${isActive ? activeClass : inactiveClass}"
+            class="flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-colors active:scale-95 ${isActive ? activeClass : inactiveClass}"
           >
             <span>${escapeHtml(sheet.icon || '📄')}</span>
             <span>${escapeHtml(sheet.name)}</span>
-            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
+            <span class="tabular-nums text-[10px] px-1.5 py-0.5 rounded-full leading-none ${isActive ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-900 text-slate-400'} font-bold">${count}</span>
           </button>
         `;
       }).join('');
@@ -2552,13 +2603,13 @@ function renderSheetsView() {
     if (thead) {
       const dynamicThs = columns.map(col => {
         const alignClass = col.type === 'status' ? 'text-center' : (col.type === 'number' ? 'text-right' : '');
-        return `<th class="p-2.5 ${alignClass}">${escapeHtml(col.name || col.id)}</th>`;
+        return `<th class="px-3 py-2.5 ${alignClass}">${escapeHtml(col.name || col.id)}</th>`;
       }).join('');
       thead.innerHTML = `
         <tr>
-          <th class="p-2.5 text-center w-12">#</th>
+          <th class="px-2.5 py-2.5 text-center w-10">#</th>
           ${dynamicThs}
-          <th class="p-2.5 text-center w-20">Thao Tác</th>
+          <th class="px-3 py-2.5 text-center w-20">Thao Tác</th>
         </tr>
       `;
     }
@@ -2585,7 +2636,7 @@ function renderSheetsView() {
         tbody.innerHTML = `
           <tr>
             <td colspan="${colSpan}" class="text-center py-8 text-slate-500 text-xs">
-              ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "+ Thêm Dòng" để tạo.'}
+              ${q ? 'Không tìm thấy dòng nào khớp với từ khóa "' + escapeHtml(q) + '"' : 'Trang tính này hiện chưa có dữ liệu. Bấm "Thêm dòng" để tạo.'}
             </td>
           </tr>
         `;
@@ -2595,15 +2646,15 @@ function renderSheetsView() {
           const cellsHtml = columns.map((col, colIdx) => renderSheetCellHtml(r, col, colIdx)).join('');
 
           return `
-            <tr class="hover:bg-slate-800/40 transition">
-              <td class="p-2.5 text-center text-slate-500 font-mono text-[11px]">${idx + 1}</td>
+            <tr class="hover:bg-slate-800/40 transition-colors">
+              <td class="px-2.5 py-2.5 text-center text-slate-500 font-mono tabular-nums text-[11px]">${idx + 1}</td>
               ${cellsHtml}
-              <td class="p-2.5 text-center">
+              <td class="px-3 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-1">
-                  <button type="button" data-edit-row="${rowIdEsc}" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition" title="Sửa">
+                  <button type="button" data-edit-row="${rowIdEsc}" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition-colors" title="Sửa">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  <button type="button" data-delete-row="${rowIdEsc}" class="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition" title="Xóa">
+                  <button type="button" data-delete-row="${rowIdEsc}" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors" title="Xóa">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -2617,7 +2668,7 @@ function renderSheetsView() {
     // 4. Update count text
     const countEl = document.getElementById('sheetRowCountText');
     if (countEl) {
-      countEl.innerHTML = `Đang hiển thị <strong>${filteredRows.length}</strong> / <strong>${rows.length}</strong> dòng • Sheet: <strong>${escapeHtml(activeSheet.name)}</strong>`;
+      countEl.innerHTML = `<span class="tabular-nums"><strong>${filteredRows.length}</strong> / <strong>${rows.length}</strong> dòng</span> • <strong>${escapeHtml(activeSheet.name)}</strong>`;
     }
   } catch (err) {
     console.error('[Sheets] renderSheetsView error:', err);
@@ -2642,6 +2693,7 @@ function renderSheetsView() {
     }
   } finally {
     refreshIcons();
+    requestAnimationFrame(updateSheetScrollHint);
   }
 }
 
@@ -3384,6 +3436,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('pagehide', () => {
     flushPendingSync();
+  });
+
+  window.addEventListener('resize', () => {
+    if (currentActiveTab === 'sheets') {
+      updateSheetScrollHint();
+    } else if (currentActiveTab === 'checklist' && checklistViewMode === 'day') {
+      const strip = document.getElementById('dateChipsStrip');
+      const activeChip = strip ? strip.querySelector(`[data-chip-date="${selectedDate}"]`) : null;
+      if (strip && activeChip) {
+        const targetLeft = activeChip.offsetLeft - (strip.clientWidth - activeChip.offsetWidth) / 2;
+        strip.scrollLeft = Math.max(0, targetLeft);
+      }
+    }
   });
 
   // 9. Initial Render
