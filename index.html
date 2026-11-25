@@ -188,16 +188,20 @@
     <!-- TAB 1: CHECKLIST VIEW -->
     <div id="viewChecklist" class="flex flex-col gap-4">
 
-      <!-- Checklist Sub-mode Switcher: Theo ngày vs Toàn bộ -->
-      <div class="grid grid-cols-2 gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/[0.08]">
-        <button type="button" id="btnChecklistModeDay" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]">
+      <!-- Checklist Sub-mode Switcher: Theo ngày vs Toàn bộ vs Nhóm tập -->
+      <div class="grid grid-cols-3 gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/[0.08]">
+        <button type="button" id="btnChecklistModeDay" class="flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-3 rounded-[8px] text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]">
           <i data-lucide="calendar-days" class="w-3.5 h-3.5 flex-shrink-0"></i>
           <span>Theo ngày</span>
         </button>
-        <button type="button" id="btnChecklistModeAll" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]">
+        <button type="button" id="btnChecklistModeAll" class="flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-3 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]">
           <i data-lucide="layers" class="w-3.5 h-3.5 flex-shrink-0"></i>
           <span>Toàn bộ</span>
           <span id="badgeAllTasksTotal" class="tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10 leading-none">0</span>
+        </button>
+        <button type="button" id="btnChecklistModeGym" class="flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-3 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]">
+          <i data-lucide="dumbbell" class="w-3.5 h-3.5 flex-shrink-0"></i>
+          <span>Nhóm tập</span>
         </button>
       </div>
 
@@ -270,6 +274,34 @@
 
       <!-- Overdue Unfinished Past Tasks Banner -->
       <div id="overdueBanner" class="hidden bg-amber-500/[0.08] border border-amber-500/25 rounded-2xl p-3.5 flex flex-col gap-2.5"></div>
+
+      <!-- Gym Quick-Load Strip (6-Day PPL A/B + Daily Habits XANH/VÀNG/ĐỎ) -->
+      <div id="gymQuickBar" class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08] flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2 min-w-0">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="dumbbell" class="w-3.5 h-3.5"></i>
+            </span>
+            <span class="text-xs font-bold text-slate-200 truncate">Gym 6 Buổi</span>
+            <span id="gymQuickActiveGroupBadge" class="hidden text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 truncate max-w-[115px] sm:max-w-[180px]"></span>
+          </div>
+          <span id="gymQuickHabitBadge" class="hidden tabular-nums flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap"></span>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+          <select id="selectQuickGymGroup" aria-label="Chọn nhóm tập cho ngày này" class="min-w-0 flex-1 bg-slate-950/90 text-xs font-semibold text-slate-100 rounded-xl px-2.5 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500 transition-colors"></select>
+          <div class="grid grid-cols-2 sm:flex items-center gap-1.5 flex-shrink-0">
+            <button type="button" id="btnQuickApplyGymGroup" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/35 text-emerald-300 text-[11px] font-bold whitespace-nowrap transition-colors active:scale-95">
+              <i data-lucide="zap" class="w-3.5 h-3.5 flex-shrink-0"></i>
+              <span>+ / Đổi nhóm tập</span>
+            </button>
+            <button type="button" id="btnQuickAddGymHabits" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[11px] font-bold whitespace-nowrap transition-colors active:scale-95">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 flex-shrink-0"></i>
+              <span>+ 6 Thói quen</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Quick Add Task Card for Selected Date -->
       <div class="bg-slate-900/90 rounded-2xl p-3.5 sm:p-4 border border-white/[0.08]">
@@ -444,6 +476,216 @@
           <button type="button" id="btnResetAllFilters" class="mt-3 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-emerald-500/20 transition-colors active:scale-95">
             Đặt lại bộ lọc
           </button>
+        </div>
+      </div>
+
+      <!-- SECTION: NHÓM TẬP GYM & REVIEW 12 TUẦN (GYM PLAN 6 BUỔI) -->
+      <div id="checklistGymSection" class="hidden flex flex-col gap-3.5">
+        <!-- 2-Pill Inner Switcher -->
+        <div class="grid grid-cols-2 gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/[0.08]">
+          <button type="button" id="btnGymSubGroups" class="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-[8px] text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]">
+            <i data-lucide="dumbbell" class="w-3.5 h-3.5 flex-shrink-0"></i>
+            <span>Kho Nhóm Tập</span>
+          </button>
+          <button type="button" id="btnGymSubReview" class="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-[8px] text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]">
+            <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 flex-shrink-0"></i>
+            <span>Review &amp; Log Tạ ★</span>
+          </button>
+        </div>
+
+        <!-- SUB-VIEW 1: KHO NHÓM TẬP -->
+        <div id="gymSubGroupsView" class="flex flex-col gap-3">
+          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                <i data-lucide="layers" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
+                <span class="truncate">Kho Nhóm Tập 6 Buổi PPL A/B</span>
+              </h3>
+              <p id="labelGymGroupsMeta" class="text-[11px] text-slate-400 mt-0.5 tabular-nums">7 nhóm • 40 bài • 12 bài ★ • 119 hiệp/tuần</p>
+            </div>
+            <button type="button" id="btnOpenNewGymGroupModal" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold whitespace-nowrap transition-colors active:scale-95 flex-shrink-0">
+              <i data-lucide="plus" class="w-3.5 h-3.5 flex-shrink-0"></i>
+              <span>Nhóm tập mới</span>
+            </button>
+          </div>
+
+          <!-- Inline Collapsible Form: Tạo nhóm tập mới -->
+          <div id="panelNewGymGroupForm" class="hidden bg-slate-900/95 rounded-2xl p-3.5 border border-emerald-500/30 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Tạo nhóm tập tùy chỉnh mới
+              </span>
+              <button type="button" id="btnCancelNewGymGroup" class="text-slate-400 hover:text-white p-1 rounded-lg" aria-label="Đóng">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+            <form id="formNewGymGroup" class="flex flex-col gap-2.5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input type="text" id="inputNewGymGroupName" required placeholder="Tên nhóm (vd: Full Body Nhanh, Bụng + Cardio...)" class="w-full bg-slate-950/90 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+                <select id="selectNewGymGroupDow" class="w-full bg-slate-950/90 text-xs text-slate-200 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+                  <option value="">Linh hoạt (không cố định thứ)</option>
+                  <option value="1">Gợi ý Thứ Hai (T2)</option>
+                  <option value="2">Gợi ý Thứ Ba (T3)</option>
+                  <option value="3">Gợi ý Thứ Tư (T4)</option>
+                  <option value="4">Gợi ý Thứ Năm (T5)</option>
+                  <option value="5">Gợi ý Thứ Sáu (T6)</option>
+                  <option value="6">Gợi ý Thứ Bảy (T7)</option>
+                  <option value="0">Gợi ý Chủ Nhật (CN)</option>
+                </select>
+              </div>
+              <input type="text" id="inputNewGymGroupFocus" placeholder="Trọng tâm nhóm cơ / ghi chú buổi tập..." class="w-full bg-slate-950/90 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+              <div class="flex items-center justify-end gap-2">
+                <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors active:scale-95">
+                  Lưu nhóm tập
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Workout Groups List -->
+          <div id="containerGymGroupsList" class="flex flex-col gap-2.5">
+            <!-- Dynamically rendered workout groups -->
+          </div>
+        </div>
+
+        <!-- SUB-VIEW 2: REVIEW 12 TUẦN & LOG TẠ 12 BÀI ★ -->
+        <div id="gymSubReviewView" class="hidden flex flex-col gap-3.5">
+          <!-- Sync to Sheets & Export CSV Card -->
+          <div class="bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 rounded-2xl p-3.5 border border-emerald-500/25 flex flex-col gap-2.5">
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                  <i data-lucide="trophy" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
+                  Lộ trình 12 Tuần • 6 Múi (InBody 25/10)
+                </span>
+                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 whitespace-nowrap">24/7 Cloud DB</span>
+              </div>
+              <p id="labelGymProgramSummary" class="text-[11px] text-slate-300 tabular-nums">Mốc T0: 70.6 kg • SMM 32.2 kg • Mỡ bụng 7.3 kg → Đích ~67.2 kg</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="btnGymSyncToSheets" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors active:scale-95 whitespace-nowrap shadow-lg shadow-emerald-950/40">
+                <i data-lucide="table-2" class="w-4 h-4 flex-shrink-0"></i>
+                <span>Đồng bộ sang Bảng Tính (Sheets)</span>
+              </button>
+              <button type="button" id="btnGymExportCsv" class="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/[0.08] text-slate-200 text-xs font-semibold transition-colors active:scale-95 whitespace-nowrap">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0"></i>
+                <span>Xuất CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Week Selector & 4 Compact KPI Cards -->
+          <div class="flex flex-col gap-2.5">
+            <div class="flex items-center justify-between gap-2 bg-slate-900/90 p-2.5 rounded-2xl border border-white/[0.08]">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <i data-lucide="calendar-range" class="w-4 h-4 text-cyan-400 flex-shrink-0"></i>
+                <select id="selectGymReviewWeek" aria-label="Chọn tuần review" class="min-w-0 flex-1 bg-slate-950/90 text-xs font-bold text-white rounded-xl px-2.5 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500"></select>
+              </div>
+              <span id="labelGymReviewWeekDates" class="tabular-nums text-[11px] font-semibold text-slate-400 whitespace-nowrap flex-shrink-0 px-1"></span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Buổi tập /6</div>
+                <div id="gymKpiWorkouts" class="tabular-nums text-xl font-extrabold text-white mt-1 leading-none">0/6</div>
+              </div>
+              <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Ăn chuẩn /7</div>
+                <div id="gymKpiCleanEat" class="tabular-nums text-xl font-extrabold text-white mt-1 leading-none">0/7</div>
+              </div>
+              <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-amber-400">Bước &amp; Ngủ /7</div>
+                <div id="gymKpiStepsSleep" class="tabular-nums text-xl font-extrabold text-white mt-1 leading-none">0/7</div>
+              </div>
+              <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Ngày Xanh</div>
+                <div id="gymKpiGreenDays" class="tabular-nums text-xl font-extrabold text-emerald-400 mt-1 leading-none">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sunday Check-in Compact Form & Live Auto-Advice -->
+          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="clipboard-check" class="w-4 h-4 text-emerald-400"></i>
+                Check-in Sáng Chủ Nhật
+              </h4>
+              <div class="flex items-center gap-1.5 text-[10px] font-bold tabular-nums">
+                <span id="gymDeltaWeightBadge" class="hidden px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10"></span>
+                <span id="gymDeltaWaistBadge" class="hidden px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10"></span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label for="inputGymBaselineWaist" class="block text-[11px] font-semibold text-slate-400 mb-1">Eo gốc T0 (cm)</label>
+                <input type="number" step="0.1" inputmode="decimal" id="inputGymBaselineWaist" placeholder="vd: 84.0" class="w-full tabular-nums bg-slate-950/90 text-xs font-semibold text-white placeholder-slate-600 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+              </div>
+              <div>
+                <label for="inputGymWeekWeight" class="block text-[11px] font-semibold text-slate-400 mb-1">Cân sáng CN (kg)</label>
+                <input type="number" step="0.1" inputmode="decimal" id="inputGymWeekWeight" placeholder="vd: 69.8" class="w-full tabular-nums bg-slate-950/90 text-xs font-semibold text-white placeholder-slate-600 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+              </div>
+              <div>
+                <label for="inputGymWeekWaist" class="block text-[11px] font-semibold text-slate-400 mb-1">Eo rốn CN (cm)</label>
+                <input type="number" step="0.1" inputmode="decimal" id="inputGymWeekWaist" placeholder="vd: 82.5" class="w-full tabular-nums bg-slate-950/90 text-xs font-semibold text-white placeholder-slate-600 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+              </div>
+              <div>
+                <label for="selectGymWeekFeel" class="block text-[11px] font-semibold text-slate-400 mb-1">Mức tạ tuần này</label>
+                <select id="selectGymWeekFeel" class="w-full bg-slate-950/90 text-xs font-semibold text-white rounded-xl px-2.5 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+                  <option value="">— Chọn cảm giác —</option>
+                  <option value="Tăng tốt">Tăng tốt</option>
+                  <option value="Giữ ổn">Giữ ổn</option>
+                  <option value="Hơi tụt">Hơi tụt</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label for="inputGymWeekNote" class="block text-[11px] font-semibold text-slate-400 mb-1">Ghi chú tuần</label>
+              <input type="text" id="inputGymWeekNote" placeholder="Ghi nhanh về sức tập, giấc ngủ, bữa tiệc..." class="w-full bg-slate-950/90 text-xs text-white placeholder-slate-600 rounded-xl px-3 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500">
+            </div>
+
+            <!-- Live Auto-Adjustment Advice Banner -->
+            <div id="boxGymAutoAdvice" class="rounded-xl p-2.5 bg-emerald-500/10 border border-emerald-500/25 flex items-start gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
+              <div class="min-w-0">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Gợi ý điều chỉnh tự động</div>
+                <p id="textGymAutoAdvice" class="text-xs text-slate-200 mt-0.5 leading-snug">Chưa có dữ liệu tuần này — Tick 6 thói quen hàng ngày &amp; check-in sáng Chủ Nhật.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 12 ★ Key Lifts Table -->
+          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-col gap-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="min-w-0">
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span class="text-amber-400">★</span> 12 Bài Chủ Lực (Log Tạ Tuần)
+                </h4>
+                <p class="text-[11px] text-slate-400 mt-0.5">Đạt đỉnh rep 3 hiệp → tăng +2.5 kg buổi sau</p>
+              </div>
+              <span id="badgeGymKeyLiftsProgress" class="tabular-nums text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">0/12 tuần này</span>
+            </div>
+            <div id="containerGymKeyLifts" class="flex flex-col gap-2">
+              <!-- Dynamically rendered 12 ★ key lifts with inline kg edit -->
+            </div>
+          </div>
+
+          <!-- Permanent Daily Gym Database Archive -->
+          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-col gap-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="database" class="w-4 h-4 text-cyan-400"></i>
+                Lịch Sử Gym Vĩnh Viễn
+              </h4>
+              <span id="badgeGymHistoryCount" class="tabular-nums text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10">0 ngày</span>
+            </div>
+            <div id="containerGymDailyHistory" class="flex flex-col gap-2">
+              <!-- Dynamically rendered permanent daily gym archive -->
+            </div>
+          </div>
         </div>
       </div>
 
@@ -839,8 +1081,10 @@
     </div>
   </footer>
 
+  <!-- Gym Plan 6 Buổi Data & Analytics Engine -->
+  <script src="gym-data.js?v=20261125_v1"></script>
   <!-- Main JavaScript App -->
-  <script src="app.js?v=20261123_v1"></script>
+  <script src="app.js?v=20261125_v1"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>

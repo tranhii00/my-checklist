@@ -1,8 +1,9 @@
-const CACHE_NAME = 'my-checklist-v1.5.0';
+const CACHE_NAME = 'my-checklist-v1.6.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './gym-data.js',
   './app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
