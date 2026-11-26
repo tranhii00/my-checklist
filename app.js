@@ -109,6 +109,7 @@ let selectedGymReviewWeek = (typeof window !== 'undefined' && window.GymPlan)
   ? window.GymPlan.getWeekNumberForDate(selectedDate)
   : 1;
 const expandedGymGroupIds = new Set();
+const autoPopulatedWorkoutDates = new Set();
 
 // ==========================================
 // 2. DATE UTILITIES (VIETNAMESE LOCALIZED)
@@ -330,13 +331,21 @@ function loadLocalData() {
       } else {
         appData.tasks = appData.tasks
           .filter(t => isUserTask(t) && !deletedSet.has(t.id))
-          .map(t => ({
-            ...t,
-            date: t.date || t.dateKey || getTodayDateStr(),
-            dateKey: t.dateKey || t.date || getTodayDateStr(),
-            time: t.time || t.dueTime || '',
-            dueTime: t.dueTime || t.time || ''
-          }));
+          .map(t => {
+            const base = {
+              ...t,
+              date: t.date || t.dateKey || getTodayDateStr(),
+              dateKey: t.dateKey || t.date || getTodayDateStr(),
+              time: t.time || t.dueTime || '',
+              dueTime: t.dueTime || t.time || ''
+            };
+            if (base.gymType === 'exercise' && window.GymPlan) {
+              const checks = window.GymPlan.normalizeExerciseSetChecks(base);
+              base.gymSets = checks.length;
+              base.gymSetChecks = checks;
+            }
+            return base;
+          });
       }
     } catch (e) {
       console.error('Error loading local data, resetting:', e);
@@ -577,6 +586,8 @@ function ensureGymDailyLog(dateStr) {
       weights: {},
       completedExercises: {},
       exerciseDone: {},
+      setProgress: {},
+      clearedWorkout: false,
       note: '',
       updatedAt: 0
     };
@@ -586,6 +597,8 @@ function ensureGymDailyLog(dateStr) {
   if (!log.weights || typeof log.weights !== 'object') log.weights = {};
   if (!log.completedExercises || typeof log.completedExercises !== 'object') log.completedExercises = {};
   if (!log.exerciseDone || typeof log.exerciseDone !== 'object') log.exerciseDone = {};
+  if (!log.setProgress || typeof log.setProgress !== 'object') log.setProgress = {};
+  if (typeof log.clearedWorkout !== 'boolean') log.clearedWorkout = Boolean(log.clearedWorkout);
   return log;
 }
 
@@ -614,12 +627,18 @@ function mirrorTaskStateToGymData(task) {
       log.workoutGroupName = task.gymGroupName;
       log.groupName = task.gymGroupName;
     }
+    log.clearedWorkout = false;
     if (task.gymExerciseId) {
-      log.completedExercises[task.gymExerciseId] = Boolean(task.completed);
-      log.exerciseDone[task.gymExerciseId] = Boolean(task.completed);
+      const canonExId = window.GymPlan.canonicalizeExerciseId
+        ? window.GymPlan.canonicalizeExerciseId(task.gymExerciseId)
+        : task.gymExerciseId;
+      const checks = window.GymPlan.normalizeExerciseSetChecks(task);
+      log.setProgress[canonExId] = checks.slice();
+      log.completedExercises[canonExId] = Boolean(task.completed);
+      log.exerciseDone[canonExId] = Boolean(task.completed);
       const parsedW = window.GymPlan.parsePositiveWeight(task.gymWeightKg);
       if (parsedW !== null) {
-        log.weights[task.gymExerciseId] = parsedW;
+        log.weights[canonExId] = parsedW;
       }
     }
   }
@@ -724,11 +743,13 @@ function setSyncStatusUI(status, message) {
 async function fetchCloudData(isManual = false) {
   if (!navigator.onLine) {
     setSyncStatusUI('offline', 'Thiết bị đang offline');
+    maybeAutoLoadTodaysWorkout(false);
     return;
   }
 
   if (!cloudConfig.gistId || !cloudConfig.token) {
     setSyncStatusUI('error', 'Chưa điền Token hoặc Gist ID');
+    maybeAutoLoadTodaysWorkout(false);
     return;
   }
 
@@ -846,13 +867,21 @@ async function fetchCloudData(isManual = false) {
         const rawRemote = Array.isArray(remoteData.tasks) ? remoteData.tasks : [];
         const remoteTasks = rawRemote
           .filter(t => isUserTask(t) && !allDeleted.has(t.id))
-          .map(t => ({
-            ...t,
-            date: t.date || t.dateKey || getTodayDateStr(),
-            dateKey: t.dateKey || t.date || getTodayDateStr(),
-            time: t.time || t.dueTime || '',
-            dueTime: t.dueTime || t.time || ''
-          }));
+          .map(t => {
+            const base = {
+              ...t,
+              date: t.date || t.dateKey || getTodayDateStr(),
+              dateKey: t.dateKey || t.date || getTodayDateStr(),
+              time: t.time || t.dueTime || '',
+              dueTime: t.dueTime || t.time || ''
+            };
+            if (base.gymType === 'exercise' && window.GymPlan) {
+              const checks = window.GymPlan.normalizeExerciseSetChecks(base);
+              base.gymSets = checks.length;
+              base.gymSetChecks = checks;
+            }
+            return base;
+          });
 
         // Non-destructive 2-way union merge respecting deleted tombstones
         const taskMap = new Map();
@@ -876,17 +905,24 @@ async function fetchCloudData(isManual = false) {
         appData.tasks = mergedList;
         appData.updatedAt = Date.now();
         saveLocalData();
-        renderApp();
 
-        let hasLocalNewer = false;
-        for (const t of mergedList) {
-          const rt = remoteTasks.find(r => r.id === t.id);
-          if (!rt || (t.updatedAt || 0) > (rt.updatedAt || 0)) {
-            hasLocalNewer = true;
-            break;
+        // Auto-load today's scheduled workout (T2-T7) if empty & not explicitly cleared
+        const didAutoLoadToday = maybeAutoLoadTodaysWorkout(false);
+        if (!didAutoLoadToday) {
+          renderApp();
+        }
+
+        let hasLocalNewer = didAutoLoadToday;
+        if (!hasLocalNewer) {
+          for (const t of mergedList) {
+            const rt = remoteTasks.find(r => r.id === t.id);
+            if (!rt || (t.updatedAt || 0) > (rt.updatedAt || 0)) {
+              hasLocalNewer = true;
+              break;
+            }
           }
         }
-        if (hasLocalNewer || mergedList.length > remoteTasks.length) {
+        if (hasLocalNewer || appData.tasks.length > remoteTasks.length) {
           triggeredFullPush = true;
           pushCloudData(false);
         }
@@ -894,11 +930,13 @@ async function fetchCloudData(isManual = false) {
         if (isManual) showToast('Đã tải và cập nhật dữ liệu mới nhất!', 'success');
       } catch (parseErr) {
         console.warn('Could not parse cloud JSON, uploading local data...');
+        maybeAutoLoadTodaysWorkout(false);
         triggeredFullPush = true;
         pushCloudData(false);
       }
     } else {
       // Empty gist, upload local
+      maybeAutoLoadTodaysWorkout(false);
       triggeredFullPush = true;
       pushCloudData(false);
     }
@@ -912,6 +950,7 @@ async function fetchCloudData(isManual = false) {
   } catch (err) {
     console.error('Fetch cloud error:', err);
     setSyncStatusUI('error', err.message);
+    maybeAutoLoadTodaysWorkout(false);
     if (isManual) showToast('Không thể tải từ đám mây: ' + err.message, 'error');
   }
 }
@@ -1034,9 +1073,90 @@ function addTask(title, dateStr, timeStr = '', noteStr = '') {
   showToast('Đã thêm công việc mới!', 'success');
 }
 
+function toggleExerciseSet(taskId, setIdx) {
+  const task = appData.tasks.find(t => t.id === taskId);
+  if (!task || !window.GymPlan) return;
+
+  const checks = window.GymPlan.normalizeExerciseSetChecks(task);
+  const totalSets = checks.length;
+  if (setIdx < 0 || setIdx >= totalSets) return;
+
+  const wasCompleted = Boolean(task.completed);
+  checks[setIdx] = !checks[setIdx];
+
+  const doneSets = checks.filter(Boolean).length;
+  const allDone = doneSets === totalSets;
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+
+  task.gymSets = totalSets;
+  task.gymSetChecks = checks;
+  task.completed = allDone;
+  task.completedAt = allDone ? nowIso : null;
+  task.updatedAt = now;
+  appData.updatedAt = now;
+
+  mirrorTaskStateToGymData(task);
+  saveLocalData();
+  renderApp();
+
+  if (allDone && !wasCompleted) {
+    playTaskCompleteSound();
+    showToast(`✓ Hoàn thành đủ ${totalSets}/${totalSets} hiệp: ${task.title.substring(0, 32)}`, 'success');
+  } else if (!allDone && wasCompleted) {
+    showToast(`Đã mở lại (${doneSets}/${totalSets} hiệp): ${task.title.substring(0, 28)}`, 'info');
+  }
+
+  triggerCloudSync();
+}
+
 function toggleTaskComplete(taskId) {
   const task = appData.tasks.find(t => t.id === taskId);
   if (!task) return;
+
+  // Per-set rule for Gym exercises: step next unticked set when incomplete; uncheck all sets when reopening
+  if (task.gymType === 'exercise' && window.GymPlan) {
+    const checks = window.GymPlan.normalizeExerciseSetChecks(task);
+    const totalSets = checks.length;
+    if (!task.completed) {
+      const nextUntickedIdx = checks.findIndex(v => !v);
+      if (nextUntickedIdx !== -1) {
+        toggleExerciseSet(taskId, nextUntickedIdx);
+        return;
+      }
+      // All sets already checked but completed flag lagged -> mark completed
+      const now = Date.now();
+      task.gymSets = totalSets;
+      task.gymSetChecks = checks;
+      task.completed = true;
+      task.completedAt = new Date(now).toISOString();
+      task.updatedAt = now;
+      appData.updatedAt = now;
+      mirrorTaskStateToGymData(task);
+      saveLocalData();
+      renderApp();
+      playTaskCompleteSound();
+      showToast(`✓ Hoàn thành đủ ${totalSets}/${totalSets} hiệp: ${task.title.substring(0, 32)}`, 'success');
+      triggerCloudSync();
+      return;
+    }
+
+    // Completed -> reopen by unchecking all sets
+    const now = Date.now();
+    task.gymSets = totalSets;
+    task.gymSetChecks = Array(totalSets).fill(false);
+    task.completed = false;
+    task.completedAt = null;
+    task.updatedAt = now;
+    appData.updatedAt = now;
+
+    mirrorTaskStateToGymData(task);
+    saveLocalData();
+    renderApp();
+    showToast(`Đã mở lại bài tập (0/${totalSets} hiệp): ${task.title.substring(0, 28)}`, 'info');
+    triggerCloudSync();
+    return;
+  }
 
   const now = Date.now();
   task.completed = !task.completed;
@@ -1567,10 +1687,26 @@ function renderTasksForSelectedDate() {
   const badgeCompletedCount = document.getElementById('badgeCompletedCount');
   const btnMoveAll = document.getElementById('btnMoveAllToTomorrow');
 
-  // Filter tasks for current selected date
+  // Filter tasks for current selected date & sort Gym exercises by gymOrder ascending (1, 2, 3...)
+  const sortDayTasks = (list) => {
+    return list
+      .map((task, idx) => ({ task, idx }))
+      .sort((a, b) => {
+        const aIsEx = a.task.gymType === 'exercise' ? 1 : 0;
+        const bIsEx = b.task.gymType === 'exercise' ? 1 : 0;
+        if (aIsEx !== bIsEx) return aIsEx - bIsEx;
+        if (aIsEx === 1) {
+          const ordDiff = (Number(a.task.gymOrder) || 999) - (Number(b.task.gymOrder) || 999);
+          if (ordDiff !== 0) return ordDiff;
+        }
+        return a.idx - b.idx;
+      })
+      .map(item => item.task);
+  };
+
   const dayTasks = appData.tasks.filter(t => getTaskDate(t) === selectedDate);
-  const pendingTasks = dayTasks.filter(t => !t.completed);
-  const completedTasks = dayTasks.filter(t => t.completed);
+  const pendingTasks = sortDayTasks(dayTasks.filter(t => !t.completed));
+  const completedTasks = sortDayTasks(dayTasks.filter(t => t.completed));
 
   badgePendingCount.textContent = pendingTasks.length;
   badgeCompletedCount.textContent = completedTasks.length;
@@ -1616,42 +1752,89 @@ function renderTasksForSelectedDate() {
 }
 
 function createTaskCardElement(task, isCompleted, options = {}) {
+  const isGymExercise = task.gymType === 'exercise';
+  const setChecks = isGymExercise
+    ? (window.GymPlan ? window.GymPlan.normalizeExerciseSetChecks(task) : [Boolean(isCompleted)])
+    : [];
+  const totalSets = setChecks.length;
+  const doneSets = setChecks.filter(Boolean).length;
+  const isPartialSets = isGymExercise && !isCompleted && doneSets > 0 && doneSets < totalSets;
+
   const card = document.createElement('div');
   card.className = `task-card group flex items-start gap-3 p-3.5 rounded-2xl border transition-colors duration-150 ${
-    isCompleted 
-      ? 'bg-slate-900/45 border-white/[0.06] opacity-75 hover:opacity-100' 
-      : 'bg-slate-900/90 border-white/[0.08] hover:border-slate-600'
+    isCompleted
+      ? (isGymExercise
+          ? 'bg-slate-900/60 border-emerald-500/20 opacity-90 hover:opacity-100'
+          : 'bg-slate-900/45 border-white/[0.06] opacity-75 hover:opacity-100')
+      : (isPartialSets
+          ? 'bg-slate-900/95 border-amber-500/35 hover:border-amber-400/55'
+          : 'bg-slate-900/90 border-white/[0.08] hover:border-slate-600')
   }`;
 
-  // Big Rounded Checkbox (28x28px with generous tap area)
+  // Main Left Checkbox (For Gym Exercises: shows doneSets/totalSets & steps next unticked set; ✓ reopens all sets)
   const checkboxWrapper = document.createElement('button');
   checkboxWrapper.type = 'button';
-  checkboxWrapper.className = 'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors duration-150 active:scale-90 mt-0.5';
-  
-  if (isCompleted) {
-    checkboxWrapper.className += ' bg-emerald-500 border border-emerald-400 text-white check-pop';
-    checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>';
+
+  if (isGymExercise) {
+    checkboxWrapper.className = 'min-w-[36px] h-8 px-1 flex-shrink-0 rounded-xl flex items-center justify-center transition-colors duration-150 active:scale-90 mt-0.5 tabular-nums';
+    if (isCompleted) {
+      checkboxWrapper.className += ' bg-emerald-500 border border-emerald-400 text-white check-pop';
+      checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>';
+      checkboxWrapper.title = 'Đã đủ hiệp — Bấm để mở lại & bỏ tick tất cả các hiệp';
+      checkboxWrapper.onclick = (e) => {
+        e.stopPropagation();
+        toggleTaskComplete(task.id);
+      };
+    } else {
+      if (isPartialSets) {
+        checkboxWrapper.className += ' border-2 border-amber-400/85 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-extrabold leading-none';
+      } else {
+        checkboxWrapper.className += ' border-2 border-slate-600 hover:border-emerald-400 bg-slate-950/70 hover:bg-emerald-500/10 text-slate-300 text-[11px] font-extrabold leading-none';
+      }
+      checkboxWrapper.textContent = `${doneSets}/${totalSets}`;
+      checkboxWrapper.title = `Bấm để tick Hiệp ${Math.min(totalSets, (setChecks.findIndex(v => !v) + 1) || 1)}/${totalSets}`;
+      checkboxWrapper.onclick = (e) => {
+        e.stopPropagation();
+        const nextIdx = setChecks.findIndex(v => !v);
+        if (nextIdx !== -1) {
+          toggleExerciseSet(task.id, nextIdx);
+        } else {
+          toggleTaskComplete(task.id);
+        }
+      };
+    }
   } else {
-    checkboxWrapper.className += ' border-2 border-slate-600 hover:border-emerald-400 bg-slate-950/60 hover:bg-emerald-500/10 text-transparent';
-    checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 stroke-[2.5]"></i>';
+    checkboxWrapper.className = 'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors duration-150 active:scale-90 mt-0.5';
+    if (isCompleted) {
+      checkboxWrapper.className += ' bg-emerald-500 border border-emerald-400 text-white check-pop';
+      checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>';
+    } else {
+      checkboxWrapper.className += ' border-2 border-slate-600 hover:border-emerald-400 bg-slate-950/60 hover:bg-emerald-500/10 text-transparent';
+      checkboxWrapper.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 stroke-[2.5]"></i>';
+    }
+    checkboxWrapper.onclick = (e) => {
+      e.stopPropagation();
+      toggleTaskComplete(task.id);
+    };
   }
 
-  checkboxWrapper.onclick = (e) => {
-    e.stopPropagation();
-    toggleTaskComplete(task.id);
-  };
-
-  // Content Area: Title, Time, Note, Completed Timestamp
+  // Content Area: Title, Time, Note, Per-Set Checkboxes, Completed Timestamp
   const contentArea = document.createElement('div');
   contentArea.className = 'flex-1 min-w-0 flex flex-col gap-1 cursor-pointer';
   contentArea.onclick = () => openEditModal(task.id);
 
-  // Title line with Gym ★ Key badge support
+  // Title line with Gym Order & ★ Key badge support
   const titleEl = document.createElement('div');
   titleEl.className = `text-sm font-medium leading-snug break-words ${
     isCompleted ? 'line-through text-slate-400 italic' : 'text-slate-100'
   }`;
-  if (task.gymType === 'exercise' && task.gymIsKey) {
+  if (isGymExercise && Number(task.gymOrder) > 0) {
+    const orderBadge = document.createElement('span');
+    orderBadge.className = 'tabular-nums inline-block text-xs font-bold text-slate-500 mr-1.5 not-italic no-underline';
+    orderBadge.textContent = `${task.gymOrder}.`;
+    titleEl.appendChild(orderBadge);
+  }
+  if (isGymExercise && task.gymIsKey) {
     const starBadge = document.createElement('span');
     starBadge.className = 'inline-flex items-center gap-0.5 align-middle text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/35 mr-1.5 not-italic no-underline';
     starBadge.textContent = '★';
@@ -1682,7 +1865,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
     metaLine.appendChild(habitBadge);
   }
 
-  if (task.gymType === 'exercise') {
+  if (isGymExercise) {
     const setsRepsStr = task.gymSetsReps || (Number(task.gymSets) > 0 ? `${task.gymSets} × ${task.gymReps || '10-12'}` : (task.gymReps || ''));
     if (setsRepsStr) {
       const setsBadge = document.createElement('span');
@@ -1713,7 +1896,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
     metaLine.appendChild(completedBadge);
   }
 
-  if (task.note && task.gymType !== 'exercise') {
+  if (task.note && !isGymExercise) {
     const noteBadge = document.createElement('span');
     noteBadge.className = 'inline-flex items-center gap-1 text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md max-w-[180px] sm:max-w-[220px] truncate';
     noteBadge.innerHTML = `<i data-lucide="file-text" class="w-3 h-3 text-blue-400 flex-shrink-0"></i> ${escapeHtml(task.note)}`;
@@ -1723,7 +1906,7 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   contentArea.appendChild(titleEl);
 
   // Machine subtitle line for Gym exercises
-  if (task.gymType === 'exercise' && task.gymMachine) {
+  if (isGymExercise && task.gymMachine) {
     const machineEl = document.createElement('div');
     machineEl.className = 'text-[11px] text-slate-400 leading-snug break-words';
     machineEl.textContent = `Máy: ${task.gymMachine}`;
@@ -1732,6 +1915,95 @@ function createTaskCardElement(task, isCompleted, options = {}) {
 
   if (metaLine.childNodes.length > 0) {
     contentArea.appendChild(metaLine);
+  }
+
+  // Per-Set Sub-Checkboxes inside every Gym exercise card (BOTH pending & completed)
+  if (isGymExercise && totalSets > 0) {
+    const setPct = Math.round((doneSets / totalSets) * 100);
+    const setSection = document.createElement('div');
+    setSection.className = 'mt-1.5 pt-2 border-t border-white/[0.06] flex flex-col gap-1.5';
+    setSection.onclick = (e) => e.stopPropagation();
+
+    const setHeaderRow = document.createElement('div');
+    setHeaderRow.className = 'flex items-center justify-between gap-2';
+
+    const setCountBadge = document.createElement('span');
+    setCountBadge.className = `tabular-nums inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+      doneSets === totalSets
+        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+        : (doneSets > 0
+            ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+            : 'bg-slate-950/80 text-slate-400 border-white/[0.08]')
+    }`;
+    setCountBadge.textContent = doneSets === totalSets
+      ? `✓ ${doneSets}/${totalSets} hiệp`
+      : `${doneSets}/${totalSets} hiệp`;
+
+    const setHintEl = document.createElement('span');
+    setHintEl.className = `tabular-nums text-[10px] font-semibold ${
+      doneSets === totalSets ? 'text-emerald-400' : (doneSets > 0 ? 'text-cyan-300' : 'text-slate-500')
+    }`;
+    setHintEl.textContent = doneSets === totalSets
+      ? 'Đủ hiệp'
+      : `Tick từng hiệp (${setPct}%)`;
+
+    setHeaderRow.appendChild(setCountBadge);
+    setHeaderRow.appendChild(setHintEl);
+    setSection.appendChild(setHeaderRow);
+
+    // 3px progress bar
+    const progTrack = document.createElement('div');
+    progTrack.className = 'w-full h-[3px] rounded-full bg-slate-800/90 overflow-hidden';
+    const progFill = document.createElement('div');
+    progFill.className = `h-full rounded-full transition-[width] duration-200 ease-out ${
+      doneSets === totalSets
+        ? 'bg-emerald-400'
+        : 'bg-gradient-to-r from-amber-400 to-cyan-400'
+    }`;
+    progFill.style.width = `${setPct}%`;
+    progTrack.appendChild(progFill);
+    setSection.appendChild(progTrack);
+
+    // Thumb-friendly row of set pills ([☐ Hiệp 1], [☑ Hiệp 2], [☐ Hiệp 3]...)
+    const pillsRow = document.createElement('div');
+    pillsRow.className = 'flex flex-wrap items-center gap-1.5 pt-0.5';
+
+    for (let idx = 0; idx < totalSets; idx += 1) {
+      const checked = Boolean(setChecks[idx]);
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.setAttribute('aria-pressed', checked ? 'true' : 'false');
+      pill.className = `min-h-[34px] px-2.5 py-1 rounded-xl text-[11px] font-bold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-95 select-none whitespace-nowrap tabular-nums border ${
+        checked
+          ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50 hover:bg-emerald-500/30 shadow-sm shadow-emerald-950/30'
+          : 'bg-slate-950/90 text-slate-300 border-white/[0.12] hover:border-emerald-500/40 hover:bg-slate-800/90'
+      }`;
+
+      const boxSpan = document.createElement('span');
+      boxSpan.className = `w-4 h-4 rounded-[5px] flex items-center justify-center flex-shrink-0 transition-colors ${
+        checked
+          ? 'bg-emerald-500 text-slate-950'
+          : 'border border-slate-500 bg-slate-900/90'
+      }`;
+      if (checked) {
+        boxSpan.innerHTML = '<svg viewBox="0 0 12 12" class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 6.3 4.8 8.9 9.8 3.3"/></svg>';
+      }
+
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = `Hiệp ${idx + 1}`;
+
+      pill.appendChild(boxSpan);
+      pill.appendChild(labelSpan);
+      pill.onclick = (e) => {
+        e.stopPropagation();
+        toggleExerciseSet(task.id, idx);
+      };
+
+      pillsRow.appendChild(pill);
+    }
+
+    setSection.appendChild(pillsRow);
+    contentArea.appendChild(setSection);
   }
 
   // Inline compact [ ___ kg ] weight logger right on the task card for gym exercises
@@ -1982,6 +2254,12 @@ function renderAllTasksView() {
       if (Boolean(a.completed) !== Boolean(b.completed)) {
         return a.completed ? 1 : -1;
       }
+      const aIsEx = a.gymType === 'exercise' ? 1 : 0;
+      const bIsEx = b.gymType === 'exercise' ? 1 : 0;
+      if (aIsEx === 1 && bIsEx === 1) {
+        const ordDiff = (Number(a.gymOrder) || 999) - (Number(b.gymOrder) || 999);
+        if (ordDiff !== 0) return ordDiff;
+      }
       return (a.time || a.dueTime || '').localeCompare(b.time || b.dueTime || '');
     });
 
@@ -2080,9 +2358,9 @@ function renderAllTasksView() {
 function renderGymQuickBar() {
   if (!window.GymPlan) return;
   const selectEl = document.getElementById('selectQuickGymGroup');
-  const activeBadge = document.getElementById('gymQuickActiveGroupBadge');
-  const habitBadge = document.getElementById('gymQuickHabitBadge');
+  const progressBadge = document.getElementById('gymQuickWorkoutProgress');
   const applyBtn = document.getElementById('btnQuickApplyGymGroup');
+  const clearBtn = document.getElementById('btnQuickClearGymGroup');
   if (!selectEl) return;
 
   const groups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
@@ -2097,9 +2375,12 @@ function renderGymQuickBar() {
   const prevDateAttr = selectEl.getAttribute('data-for-date');
   const currentVal = selectEl.value;
   selectEl.innerHTML = groups.map((g) => {
-    const exLen = Array.isArray(g.exercises) ? g.exercises.length : 0;
+    const exList = Array.isArray(g.exercises) ? g.exercises : [];
+    const exLen = exList.length;
+    const totalSets = exList.reduce((s, e) => s + (Number(e.sets) > 0 ? Number(e.sets) : 0), 0);
+    const setsHint = totalSets > 0 ? ` · ${totalSets} hiệp` : '';
     const tag = g.id === suggested?.id ? ' ★ Gợi ý' : '';
-    return `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${exLen} bài)${tag}</option>`;
+    return `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${exLen} bài${setsHint})${tag}</option>`;
   }).join('');
 
   if (prevDateAttr === selectedDate && currentVal && groups.some(g => g.id === currentVal)) {
@@ -2109,40 +2390,159 @@ function renderGymQuickBar() {
   }
   selectEl.setAttribute('data-for-date', selectedDate);
 
-  // Active loaded workout group indicator
-  if (activeBadge) {
-    if (summary.workoutGroupName && summary.exerciseTotalCount > 0) {
-      activeBadge.textContent = `${summary.workoutGroupName} (${summary.exerciseDoneCount}/${summary.exerciseTotalCount})`;
-      activeBadge.classList.remove('hidden');
+  const hasExercisesOnDate = (appData.tasks || []).some(
+    t => getTaskDate(t) === selectedDate && t.gymType === 'exercise'
+  );
+
+  // Active workout progress badge (e.g. T5 - Push B · 0/7 bài · 0/21 hiệp)
+  if (progressBadge) {
+    if (hasExercisesOnDate && summary.exerciseTotalCount > 0) {
+      const grpLabel = summary.workoutGroupName || 'Buổi tập';
+      const allDone = summary.exerciseDoneCount === summary.exerciseTotalCount && summary.setsDone === summary.setsTarget && summary.setsTarget > 0;
+      const inProgress = summary.setsDone > 0 && !allDone;
+      progressBadge.textContent = `${allDone ? '✓ ' : ''}${grpLabel} · ${summary.exerciseDoneCount}/${summary.exerciseTotalCount} bài · ${summary.setsDone}/${summary.setsTarget} hiệp`;
+      progressBadge.className = `tabular-nums text-[11px] font-bold px-2.5 py-0.5 rounded-full border max-w-full truncate ${
+        allDone
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+          : (inProgress
+              ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35'
+              : 'bg-slate-800/90 text-slate-200 border-white/[0.1]')
+      }`;
+    } else if (gymData?.dailyLogs?.[selectedDate]?.clearedWorkout) {
+      progressBadge.textContent = 'Đã bỏ buổi tập ngày này';
+      progressBadge.className = 'tabular-nums text-[11px] font-semibold px-2.5 py-0.5 rounded-full border bg-slate-800/80 text-slate-400 border-white/[0.08] max-w-full truncate';
     } else {
-      activeBadge.classList.add('hidden');
+      progressBadge.className = 'hidden tabular-nums text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 max-w-full truncate';
     }
   }
 
-  // Update apply button text subtly when exercises are already loaded on selectedDate
+  // Update apply button text & toggle compact clear workout button
   if (applyBtn) {
     const span = applyBtn.querySelector('span');
     if (span) {
-      span.textContent = summary.exerciseTotalCount > 0 ? 'Đổi nhóm tập' : '+ / Đổi nhóm tập';
+      span.textContent = hasExercisesOnDate ? 'Đổi buổi' : '+ Nạp / Đổi buổi';
     }
   }
 
-  // Live Ngày XANH / VÀNG / ĐỎ habit badge
-  if (habitBadge) {
-    if (summary.hasHabitTasks || summary.doneCount > 0) {
-      habitBadge.classList.remove('hidden');
-      habitBadge.textContent = `${summary.doneCount}/6 · ${summary.label}`;
-      if (summary.status === 'green') {
-        habitBadge.className = 'tabular-nums flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap bg-emerald-500/20 text-emerald-300 border-emerald-500/35';
-      } else if (summary.status === 'yellow') {
-        habitBadge.className = 'tabular-nums flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap bg-amber-500/20 text-amber-300 border-amber-500/35';
-      } else {
-        habitBadge.className = 'tabular-nums flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap bg-rose-500/20 text-rose-300 border-rose-500/35';
-      }
-    } else {
-      habitBadge.classList.add('hidden');
-    }
+  if (clearBtn) {
+    clearBtn.classList.toggle('hidden', !hasExercisesOnDate);
   }
+}
+
+function maybeAutoLoadTodaysWorkout(shouldSyncCloud = true) {
+  if (!window.GymPlan) return false;
+  const todayStr = getTodayDateStr();
+  if (autoPopulatedWorkoutDates.has(todayStr)) return false;
+
+  const todayObj = parseDateStr(todayStr);
+  const dow = todayObj.getDay(); // 0=CN, 1=T2..6=T7
+  if (dow < 1 || dow > 6) {
+    autoPopulatedWorkoutDates.add(todayStr);
+    return false;
+  }
+
+  const todayExercises = (appData.tasks || []).filter(
+    t => getTaskDate(t) === todayStr && t.gymType === 'exercise'
+  );
+  if (todayExercises.length > 0) {
+    autoPopulatedWorkoutDates.add(todayStr);
+    return false;
+  }
+
+  if (gymData?.dailyLogs?.[todayStr]?.clearedWorkout) {
+    autoPopulatedWorkoutDates.add(todayStr);
+    return false;
+  }
+
+  const groups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
+    ? gymData.workoutGroups
+    : window.GymPlan.DEFAULT_WORKOUT_GROUPS;
+  const suggested = window.GymPlan.getSuggestedGroupForDate(todayStr, groups);
+  if (!suggested || suggested.isRestDay || !Array.isArray(suggested.exercises) || suggested.exercises.length === 0) {
+    autoPopulatedWorkoutDates.add(todayStr);
+    return false;
+  }
+
+  autoPopulatedWorkoutDates.add(todayStr);
+  const { tasksToAdd } = window.GymPlan.createWorkoutTasksForDate(
+    todayStr,
+    suggested,
+    appData.tasks,
+    gymData
+  );
+  if (tasksToAdd.length === 0) return false;
+
+  appData.tasks.push(...tasksToAdd);
+
+  const now = Date.now();
+  const log = ensureGymDailyLog(todayStr);
+  if (log) {
+    log.workoutGroupId = suggested.id;
+    log.groupId = suggested.id;
+    log.workoutGroupName = suggested.name;
+    log.groupName = suggested.name;
+    log.clearedWorkout = false;
+    log.updatedAt = now;
+  }
+  gymData.updatedAt = now;
+  appData.updatedAt = now;
+
+  saveLocalGymData(true);
+  localStorage.setItem(STORAGE_KEY_GYM_DIRTY, '1');
+  saveLocalData();
+  renderApp();
+
+  if (shouldSyncCloud) {
+    triggerCloudSync();
+  }
+  showToast(`🏋️ Tự động nạp buổi tập hôm nay: ${suggested.name} (${tasksToAdd.length} bài)`, 'info');
+  return true;
+}
+
+function clearGymWorkoutForDate(dateStr) {
+  const targetDate = dateStr || selectedDate;
+  const exerciseTasks = (appData.tasks || []).filter(
+    t => getTaskDate(t) === targetDate && t.gymType === 'exercise'
+  );
+  if (exerciseTasks.length === 0) {
+    showToast('Ngày này chưa có bài tập gym nào để bỏ.', 'info');
+    return;
+  }
+
+  const removeIds = exerciseTasks.map(t => t.id);
+  const removeSet = new Set(removeIds);
+  appData.tasks = appData.tasks.filter(t => !removeSet.has(t.id));
+
+  if (!Array.isArray(appData.deletedIds)) {
+    appData.deletedIds = [];
+  }
+  const deletedIdsSet = new Set(appData.deletedIds);
+  removeIds.forEach(id => deletedIdsSet.add(id));
+  appData.deletedIds = Array.from(deletedIdsSet);
+
+  const now = Date.now();
+  const log = ensureGymDailyLog(targetDate);
+  if (log) {
+    log.clearedWorkout = true;
+    log.workoutGroupId = null;
+    log.groupId = null;
+    log.workoutGroupName = '';
+    log.groupName = '';
+    log.setProgress = {};
+    log.completedExercises = {};
+    log.exerciseDone = {};
+    log.updatedAt = now;
+  }
+  gymData.updatedAt = now;
+  appData.updatedAt = now;
+
+  autoPopulatedWorkoutDates.add(targetDate);
+  saveLocalGymData(true);
+  localStorage.setItem(STORAGE_KEY_GYM_DIRTY, '1');
+  saveLocalData();
+  renderApp();
+  triggerCloudSync();
+  showToast(`Đã bỏ buổi tập (${removeIds.length} bài) của ngày ${formatShortVNDate(targetDate)}.`, 'info');
 }
 
 function applyGymGroupToDate(groupId, dateStr, switchToDayAfter = false) {
@@ -2167,9 +2567,9 @@ function applyGymGroupToDate(groupId, dateStr, switchToDayAfter = false) {
     const repSet = new Set(replacedIds);
     appData.tasks = appData.tasks.filter(t => !repSet.has(t.id));
     if (!Array.isArray(appData.deletedIds)) appData.deletedIds = [];
-    replacedIds.forEach(id => {
-      if (!appData.deletedIds.includes(id)) appData.deletedIds.push(id);
-    });
+    const deletedIdsSet = new Set(appData.deletedIds);
+    replacedIds.forEach(id => deletedIdsSet.add(id));
+    appData.deletedIds = Array.from(deletedIdsSet);
   }
 
   if (tasksToAdd.length > 0) {
@@ -2184,11 +2584,13 @@ function applyGymGroupToDate(groupId, dateStr, switchToDayAfter = false) {
     log.groupId = group.id;
     log.workoutGroupName = group.name;
     log.groupName = group.name;
+    log.clearedWorkout = false;
     log.updatedAt = now;
   }
   gymData.updatedAt = now;
   appData.updatedAt = now;
 
+  autoPopulatedWorkoutDates.add(targetDate);
   saveLocalGymData(true);
   localStorage.setItem(STORAGE_KEY_GYM_DIRTY, '1');
   saveLocalData();
@@ -2203,33 +2605,6 @@ function applyGymGroupToDate(groupId, dateStr, switchToDayAfter = false) {
   triggerCloudSync();
   const actionVerb = replacedIds.length > 0 ? 'Đã đổi sang' : 'Đã nạp';
   showToast(`✓ ${actionVerb} "${group.name}" (${tasksToAdd.length} bài) vào ${formatShortVNDate(targetDate)}!`, 'success');
-}
-
-function addGymHabitsToDate(dateStr) {
-  if (!window.GymPlan) return;
-  const targetDate = dateStr || selectedDate;
-  const newTasks = window.GymPlan.createHabitTasksForDate(targetDate, gymData, appData.tasks);
-
-  if (newTasks.length === 0) {
-    showToast(`Ngày ${formatShortVNDate(targetDate)} đã có đủ 6 thói quen Gym rồi!`, 'info');
-    return;
-  }
-
-  appData.tasks.push(...newTasks);
-  const now = Date.now();
-  const log = ensureGymDailyLog(targetDate);
-  if (log) {
-    log.updatedAt = now;
-  }
-  gymData.updatedAt = now;
-  appData.updatedAt = now;
-
-  saveLocalGymData(true);
-  localStorage.setItem(STORAGE_KEY_GYM_DIRTY, '1');
-  saveLocalData();
-  renderApp();
-  triggerCloudSync();
-  showToast(`✓ Đã thêm ${newTasks.length} thói quen hàng ngày (XANH ≥5/6)!`, 'success');
 }
 
 function setGymSubTab(tab) {
@@ -2556,55 +2931,74 @@ function renderGymReviewView() {
   }
 
   // 6. Permanent Daily Gym Database Archive
+  renderGymDailyHistory(dailyHistory);
+}
+
+function renderGymDailyHistory(dailyHistory) {
   const historyContainer = document.getElementById('containerGymDailyHistory');
   const historyBadge = document.getElementById('badgeGymHistoryCount');
+  const items = Array.isArray(dailyHistory) ? dailyHistory : [];
   if (historyBadge) {
-    historyBadge.textContent = `${dailyHistory.length} ngày`;
+    historyBadge.textContent = `${items.length} ngày`;
   }
-  if (historyContainer) {
-    if (dailyHistory.length === 0) {
-      historyContainer.innerHTML = `
-        <div class="py-6 px-3 rounded-xl border border-dashed border-white/[0.08] text-center text-xs text-slate-400">
-          Chưa có bản ghi Gym nào. Hãy bấm <strong>+ / Đổi nhóm tập</strong> hoặc <strong>+ 6 Thói quen</strong> ở tab Theo ngày!
-        </div>
-      `;
-    } else {
-      historyContainer.innerHTML = dailyHistory.map((item) => {
-        const statusCls = item.status === 'green'
-          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/35'
-          : (item.status === 'yellow'
-            ? 'bg-amber-500/20 text-amber-300 border-amber-500/35'
-            : (item.status === 'red'
-              ? 'bg-rose-500/20 text-rose-300 border-rose-500/35'
-              : 'bg-slate-800 text-slate-400 border-white/10'));
+  if (!historyContainer) return;
 
-        const weightsPills = (item.allWeightsLogged || []).slice(0, 4).map((w) => {
-          return `<span class="tabular-nums text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/20 truncate max-w-[165px]">${w.isKey ? '★ ' : ''}${escapeHtml(w.name)}: ${w.weightKg}kg</span>`;
-        }).join('');
+  if (items.length === 0) {
+    historyContainer.innerHTML = `
+      <div class="py-6 px-3 rounded-xl border border-dashed border-white/[0.08] text-center text-xs text-slate-400">
+        Chưa có bản ghi Gym nào. Hãy nạp buổi tập qua nút <strong>+ Nạp / Đổi buổi</strong> và tick đủ hiệp ở tab Theo ngày!
+      </div>
+    `;
+    return;
+  }
 
-        return `
-          <div class="p-2.5 rounded-xl bg-slate-950/70 border border-white/[0.06] flex flex-col gap-1.5">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
-                <span class="tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">T${item.weekNum}</span>
-                <span class="tabular-nums text-xs font-bold text-white truncate">${escapeHtml(formatFullVNDate(item.dateStr))}</span>
-                <span class="tabular-nums text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusCls}">${item.doneCount}/6 · ${escapeHtml(item.label)}</span>
-              </div>
-              <button type="button" data-gym-jump-date="${escapeHtml(item.dateStr)}" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white text-[11px] font-semibold border border-white/[0.08] transition-colors active:scale-95 whitespace-nowrap flex-shrink-0">
-                Xem ngày
-              </button>
-            </div>
-            <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
-              ${item.workoutGroupName ? `<span class="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 font-semibold">${escapeHtml(item.workoutGroupName)}${item.exerciseTotalCount > 0 ? ` (${item.exerciseDoneCount}/${item.exerciseTotalCount})` : ''}</span>` : ''}
-              ${item.cleanEating ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Ăn chuẩn ✓</span>' : ''}
-              ${item.stepsSleep ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">8k &amp; Ngủ ✓</span>' : ''}
-              ${weightsPills}
-            </div>
+  historyContainer.innerHTML = items.map((item) => {
+    const setsDone = Number(item.setsDone) || 0;
+    const setsTarget = Number(item.setsTarget) || 0;
+    const exDone = Number(item.exerciseDoneCount) || 0;
+    const exTotal = Number(item.exerciseTotalCount) || 0;
+    const hasWorkout = exTotal > 0 || setsTarget > 0;
+    const allWorkoutDone = hasWorkout && exDone === exTotal && (setsTarget === 0 || setsDone === setsTarget);
+
+    const workoutProgressCls = allWorkoutDone
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+      : (item.workoutDone || setsDone > 0
+          ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35'
+          : 'bg-slate-800/90 text-slate-300 border-white/10');
+
+    const statusCls = item.status === 'green'
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/35'
+      : (item.status === 'yellow'
+        ? 'bg-amber-500/20 text-amber-300 border-amber-500/35'
+        : (item.status === 'red'
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/35'
+          : 'bg-slate-800 text-slate-400 border-white/10'));
+
+    const sortedWeights = (item.allWeightsLogged || []).slice().sort((a, b) => (b.isKey ? 1 : 0) - (a.isKey ? 1 : 0));
+    const weightsPills = sortedWeights.slice(0, 6).map((w) => {
+      return `<span class="tabular-nums text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/25 truncate max-w-[175px]">${w.isKey ? '★ ' : ''}${escapeHtml(w.name)}: ${w.weightKg}kg</span>`;
+    }).join('');
+
+    return `
+      <div class="p-2.5 rounded-xl bg-slate-950/70 border ${allWorkoutDone ? 'border-emerald-500/25' : 'border-white/[0.06]'} flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
+            <span class="tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">T${item.weekNum}</span>
+            <span class="tabular-nums text-xs font-bold text-white truncate">${escapeHtml(formatFullVNDate(item.dateStr))}</span>
+            ${hasWorkout ? `<span class="tabular-nums text-[10px] font-bold px-2 py-0.5 rounded-full border ${workoutProgressCls}">${allWorkoutDone ? '✓ ' : ''}${exDone}/${exTotal} bài · ${setsDone}/${setsTarget} hiệp</span>` : ''}
+            ${item.doneCount > 0 ? `<span class="tabular-nums text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusCls}">${item.doneCount}/6 · ${escapeHtml(item.label)}</span>` : ''}
           </div>
-        `;
-      }).join('');
-    }
-  }
+          <button type="button" data-gym-jump-date="${escapeHtml(item.dateStr)}" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white text-[11px] font-semibold border border-white/[0.08] transition-colors active:scale-95 whitespace-nowrap flex-shrink-0">
+            Xem ngày
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+          ${item.workoutGroupName ? `<span class="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 font-semibold">${escapeHtml(item.workoutGroupName)}</span>` : ''}
+          ${weightsPills}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function saveSundayCheckinField() {
@@ -2927,6 +3321,20 @@ function renderHistoryView() {
 
       rowLeft.appendChild(toggleBtn);
       rowLeft.appendChild(titleSpan);
+
+      if (t.gymType === 'exercise' && window.GymPlan) {
+        const checks = window.GymPlan.normalizeExerciseSetChecks(t);
+        const doneS = checks.filter(Boolean).length;
+        const totalS = checks.length;
+        const setMini = document.createElement('span');
+        setMini.className = `tabular-nums flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
+          doneS === totalS
+            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+            : (doneS > 0 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-slate-800 text-slate-400 border-white/[0.06]')
+        }`;
+        setMini.textContent = `${doneS}/${totalS} hiệp`;
+        rowLeft.appendChild(setMini);
+      }
 
       const rowRight = document.createElement('div');
       rowRight.className = 'flex items-center gap-2 flex-shrink-0';
@@ -4034,9 +4442,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
   }
-  const btnQuickAddHabits = document.getElementById('btnQuickAddGymHabits');
-  if (btnQuickAddHabits) {
-    btnQuickAddHabits.onclick = () => addGymHabitsToDate(selectedDate);
+  const btnQuickClearGym = document.getElementById('btnQuickClearGymGroup');
+  if (btnQuickClearGym) {
+    btnQuickClearGym.onclick = () => clearGymWorkoutForDate(selectedDate);
   }
 
   const btnGymSubGroups = document.getElementById('btnGymSubGroups');

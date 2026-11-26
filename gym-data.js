@@ -1080,6 +1080,16 @@
   }
 
   // Canonicalize exercise IDs seamlessly between 'ex_push_a_1' (frontend) and 'push_a_1' (backend)
+  function canonicalizeExerciseId(exId) {
+    if (!exId || typeof exId !== 'string') return '';
+    const trimmed = exId.trim();
+    if (!trimmed) return '';
+    if (/^(push_a|pull_a|legs_a|push_b|pull_b|legs_b|rest_sun)_\d+$/.test(trimmed)) {
+      return 'ex_' + trimmed;
+    }
+    return trimmed;
+  }
+
   function getExerciseIdAliases(exId) {
     if (!exId || typeof exId !== 'string') return [];
     const trimmed = exId.trim();
@@ -1091,6 +1101,34 @@
       list.push('ex_' + trimmed);
     }
     return list;
+  }
+
+  function normalizeExerciseSetChecks(task) {
+    const setsFromField = Number(task && task.gymSets);
+    const setsFromRepsMatch = String((task && task.gymSetsReps) || '').match(/^(\d+)/);
+    const setsFromReps = setsFromRepsMatch ? Number(setsFromRepsMatch[1]) : 0;
+    const totalSets = Math.max(
+      1,
+      Math.round(
+        (Number.isFinite(setsFromField) && setsFromField > 0 ? setsFromField : 0) ||
+        (Number.isFinite(setsFromReps) && setsFromReps > 0 ? setsFromReps : 0) ||
+        3
+      )
+    );
+
+    if (Array.isArray(task && task.gymSetChecks) && task.gymSetChecks.length > 0) {
+      const normalized = [];
+      for (let i = 0; i < totalSets; i += 1) {
+        normalized.push(Boolean(task.gymSetChecks[i]));
+      }
+      return normalized;
+    }
+
+    if (task && task.completed) {
+      return Array(totalSets).fill(true);
+    }
+
+    return Array(totalSets).fill(false);
   }
 
   function canonicalizeHabitId(hid) {
@@ -1256,6 +1294,15 @@
           });
         }
 
+        const setProgress = {};
+        if (entry.setProgress && typeof entry.setProgress === 'object') {
+          Object.entries(entry.setProgress).forEach(([exId, arr]) => {
+            const canonExId = canonicalizeExerciseId(exId);
+            if (!canonExId || !Array.isArray(arr) || arr.length === 0) return;
+            setProgress[canonExId] = arr.map((v) => Boolean(v));
+          });
+        }
+
         const groupId = entry.workoutGroupId || entry.groupId || null;
         const groupName = String(entry.workoutGroupName || entry.groupName || '');
 
@@ -1270,6 +1317,8 @@
           weights,
           completedExercises,
           exerciseDone: { ...completedExercises },
+          setProgress,
+          clearedWorkout: Boolean(entry.clearedWorkout),
           note: String(entry.note || ''),
           updatedAt: Number(entry.updatedAt) || 0
         };
@@ -1390,6 +1439,22 @@
         const rTs = Number(rLog.updatedAt) || remoteTopTs;
         const winner = rTs > lTs ? rLog : lLog;
         const loser = rTs > lTs ? lLog : rLog;
+        const mergedSetProgress = {};
+        const loserSP = loser.setProgress && typeof loser.setProgress === 'object' ? loser.setProgress : {};
+        const winnerSP = winner.setProgress && typeof winner.setProgress === 'object' ? winner.setProgress : {};
+        Object.entries(loserSP).forEach(([exId, arr]) => {
+          const canonExId = canonicalizeExerciseId(exId);
+          if (canonExId && Array.isArray(arr) && arr.length > 0) {
+            mergedSetProgress[canonExId] = arr.map(Boolean);
+          }
+        });
+        Object.entries(winnerSP).forEach(([exId, arr]) => {
+          const canonExId = canonicalizeExerciseId(exId);
+          if (canonExId && Array.isArray(arr) && arr.length > 0) {
+            mergedSetProgress[canonExId] = arr.map(Boolean);
+          }
+        });
+        const mergedClearedWorkout = Boolean(winner.clearedWorkout);
         mergedDailyLogs[d] = {
           ...loser,
           ...winner,
@@ -1397,6 +1462,8 @@
           weights: { ...(loser.weights || {}), ...(winner.weights || {}) },
           completedExercises: { ...(loser.completedExercises || {}), ...(winner.completedExercises || {}) },
           exerciseDone: { ...(loser.completedExercises || {}), ...(winner.completedExercises || {}) },
+          setProgress: mergedClearedWorkout ? {} : mergedSetProgress,
+          clearedWorkout: mergedClearedWorkout,
           updatedAt: Math.max(lTs, rTs)
         };
       }
@@ -1615,8 +1682,43 @@
       if (isDone) doneCount += 1;
     });
 
-    const exerciseTotalCount = exerciseTasks.length;
-    const exerciseDoneCount = exerciseTasks.filter((t) => Boolean(t.completed)).length;
+    const exerciseStats = new Map();
+    exerciseTasks.forEach((t, idx) => {
+      const checks = normalizeExerciseSetChecks(t);
+      const doneSets = checks.filter(Boolean).length;
+      const targetSets = checks.length;
+      const isDone = Boolean(t.completed) || (targetSets > 0 && doneSets === targetSets);
+      const key = canonicalizeExerciseId(t.gymExerciseId) || String(t.id || `ex_task_${idx}`);
+      exerciseStats.set(key, {
+        setsDone: doneSets,
+        setsTarget: targetSets,
+        completed: isDone
+      });
+    });
+
+    if (dailyLog && dailyLog.setProgress && typeof dailyLog.setProgress === 'object') {
+      Object.entries(dailyLog.setProgress).forEach(([rawExId, arr]) => {
+        const key = canonicalizeExerciseId(rawExId);
+        if (!key || exerciseStats.has(key) || !Array.isArray(arr) || arr.length === 0) return;
+        const doneSets = arr.filter(Boolean).length;
+        const targetSets = arr.length;
+        exerciseStats.set(key, {
+          setsDone: doneSets,
+          setsTarget: targetSets,
+          completed: doneSets === targetSets
+        });
+      });
+    }
+
+    let setsDone = 0;
+    let setsTarget = 0;
+    let exerciseDoneCount = 0;
+    exerciseStats.forEach((st) => {
+      setsDone += st.setsDone;
+      setsTarget += st.setsTarget;
+      if (st.completed) exerciseDoneCount += 1;
+    });
+    const exerciseTotalCount = exerciseStats.size;
 
     const firstExercise = exerciseTasks[0] || null;
     const workoutGroupId = firstExercise?.gymGroupId || dailyLog?.workoutGroupId || dailyLog?.groupId || null;
@@ -1630,25 +1732,36 @@
     const dObj = parseIsoDate(targetDate);
     const isSunday = dObj ? dObj.getDay() === 0 : false;
 
-    const completedMajorityExercises =
+    const completedWorkoutExercises =
       !isRestGroup &&
-      exerciseTotalCount > 0 &&
-      exerciseDoneCount >= Math.max(1, Math.ceil(exerciseTotalCount * 0.5));
+      (
+        (exerciseTotalCount > 0 &&
+          (exerciseDoneCount >= Math.max(1, Math.ceil(exerciseTotalCount * 0.5)) ||
+            exerciseDoneCount >= 3)) ||
+        (setsTarget > 0 && setsDone >= Math.max(1, Math.ceil(setsTarget * 0.5)))
+      );
 
     const workoutDone = isSunday
-      ? completedMajorityExercises
-      : Boolean(habitsMap.habit_workout || completedMajorityExercises);
+      ? completedWorkoutExercises
+      : Boolean(completedWorkoutExercises || habitsMap.habit_workout);
 
     const cleanEating = Boolean(
       habitsMap.habit_protein && habitsMap.habit_carbs && habitsMap.habit_no_liquid_cal
     );
     const stepsSleep = Boolean(habitsMap.habit_steps_water && habitsMap.habit_sleep);
 
+    const hasSetProgress = Boolean(
+      dailyLog &&
+        dailyLog.setProgress &&
+        Object.values(dailyLog.setProgress).some((arr) => Array.isArray(arr) && arr.length > 0)
+    );
+
     const hasLogActivity = Boolean(
       dailyLog &&
         (Object.values(dailyLog.habits || {}).some(Boolean) ||
           Object.keys(dailyLog.weights || {}).length > 0 ||
-          dailyLog.workoutGroupId ||
+          hasSetProgress ||
+          (dailyLog.workoutGroupId && !dailyLog.clearedWorkout) ||
           dailyLog.note)
     );
 
@@ -1663,7 +1776,7 @@
     } else if (doneCount >= 1) {
       status = 'red';
       label = 'ĐỎ';
-    } else if (hasHabitTasks || (hasLogActivity && targetDate && targetDate < getTodayDateStr())) {
+    } else if (hasHabitTasks || (hasLogActivity && !exerciseTotalCount && targetDate && targetDate < getTodayDateStr())) {
       status = 'red';
       label = 'ĐỎ';
     }
@@ -1679,10 +1792,12 @@
       habitsMap,
       exerciseDoneCount,
       exerciseTotalCount,
+      setsDone,
+      setsTarget,
       workoutGroupId,
       workoutGroupName,
       hasHabitTasks,
-      hasActivity: Boolean(hasHabitTasks || exerciseTotalCount > 0 || hasLogActivity)
+      hasActivity: Boolean(hasHabitTasks || exerciseTotalCount > 0 || setsTarget > 0 || hasLogActivity)
     };
   }
 
@@ -1692,7 +1807,7 @@
   function computeWeeklyAdvice({ weekNum, hasActivity, sessionsCount, cleanEatingDays, waistDelta, strengthTrend }) {
     if (!hasActivity) {
       return {
-        text: 'Chưa có dữ liệu tuần này — Tick 6 thói quen hàng ngày & check-in 30 giây sáng Chủ Nhật.',
+        text: 'Chưa có dữ liệu tuần này — Tick đủ hiệp từng bài tập mỗi buổi & check-in 30 giây sáng Chủ Nhật.',
         tone: 'neutral'
       };
     }
@@ -2052,10 +2167,25 @@
           workoutGroupName: summary.workoutGroupName,
           exerciseDoneCount: summary.exerciseDoneCount,
           exerciseTotalCount: summary.exerciseTotalCount,
+          setsDone: summary.setsDone,
+          setsTarget: summary.setsTarget,
           keyLiftsLogged,
           allWeightsLogged,
           note: log?.note || ''
         };
+      })
+      .filter((entry) => {
+        const log = dailyLogs[entry.dateStr];
+        return Boolean(
+          entry.exerciseTotalCount > 0 ||
+          entry.setsDone > 0 ||
+          entry.setsTarget > 0 ||
+          entry.doneCount > 0 ||
+          entry.workoutDone ||
+          entry.allWeightsLogged.length > 0 ||
+          (entry.note && entry.note.trim()) ||
+          (entry.workoutGroupName && !(log && log.clearedWorkout))
+        );
       });
 
     return {
@@ -2287,23 +2417,47 @@
 
     const replacedIds = existingOnDate.filter((t) => !t.completed).map((t) => t.id);
     const completedExerciseIds = new Set(
-      existingOnDate.filter((t) => t.completed && t.gymExerciseId).map((t) => t.gymExerciseId)
+      existingOnDate.filter((t) => t.completed && t.gymExerciseId).map((t) => canonicalizeExerciseId(t.gymExerciseId))
     );
-    const existingLogWeights = gymData?.dailyLogs?.[targetDate]?.weights || {};
+    const dayLog = gymData?.dailyLogs?.[targetDate] || null;
+    const existingLogWeights = dayLog?.weights || {};
+    const existingLogSetProgress = dayLog?.setProgress || {};
 
     const now = Date.now();
     const tasksToAdd = [];
 
     group.exercises.forEach((ex, idx) => {
       if (!ex || !ex.name) return;
-      if (ex.id && completedExerciseIds.has(ex.id)) return;
+      const exId = ex.id || `${group.id}_ex_${idx + 1}`;
+      const canonExId = canonicalizeExerciseId(exId);
+      if (canonExId && completedExerciseIds.has(canonExId)) return;
 
-      const setsNum = Number(ex.sets) || 0;
-      const setsReps = setsNum > 0 ? `${setsNum} × ${ex.reps || '10-12'}` : ex.reps || '';
+      const rawSets = Number(ex.sets);
+      const displaySets = Number.isFinite(rawSets) && rawSets > 0 ? Math.round(rawSets) : 0;
+      const setsNum = displaySets > 0 ? displaySets : (rawSets === 0 ? 1 : 3);
+      const setsReps = displaySets > 0 ? `${displaySets} × ${ex.reps || '10-12'}` : (ex.reps || '');
       const rirPart = ex.rir ? ` · RIR ${ex.rir}` : '';
       const restPart = ex.rest && ex.rest !== '-' ? ` · Nghỉ ${ex.rest}` : '';
-      const prevWeight = gymData ? getLatestExerciseWeight(gymData, safeTasks, ex.id, targetDate) : null;
-      const loggedTodayWeight = parsePositiveWeight(existingLogWeights[ex.id]);
+      const prevWeight = gymData ? getLatestExerciseWeight(gymData, safeTasks, exId, targetDate) : null;
+
+      let loggedTodayWeight = null;
+      let savedSetChecks = null;
+      const aliases = getExerciseIdAliases(exId);
+      for (let i = 0; i < aliases.length; i += 1) {
+        const aid = aliases[i];
+        if (loggedTodayWeight === null) {
+          const w = parsePositiveWeight(existingLogWeights[aid]);
+          if (w !== null) loggedTodayWeight = w;
+        }
+        if (savedSetChecks === null && Array.isArray(existingLogSetProgress[aid]) && existingLogSetProgress[aid].length > 0) {
+          savedSetChecks = existingLogSetProgress[aid];
+        }
+      }
+
+      const gymSetChecks = savedSetChecks
+        ? normalizeExerciseSetChecks({ gymSets: setsNum, gymSetChecks: savedSetChecks, completed: false })
+        : Array(setsNum).fill(false);
+      const isAllSetsDone = gymSetChecks.every(Boolean);
 
       const noteParts = [];
       if (ex.machine) noteParts.push(`Máy: ${ex.machine}`);
@@ -2322,19 +2476,20 @@
         priority: ex.isKey ? 'high' : 'medium',
         repeat: 'none',
         note: noteParts.join(' | '),
-        completed: false,
-        completedAt: null,
+        completed: isAllSetsDone,
+        completedAt: isAllSetsDone ? new Date(now).toISOString() : null,
         createdAt: now + idx,
         updatedAt: now + idx,
         gymType: 'exercise',
         gymGroupId: group.id,
         gymGroupName: group.name,
-        gymExerciseId: ex.id || `${group.id}_ex_${idx + 1}`,
+        gymExerciseId: exId,
         gymIsKey: Boolean(ex.isKey),
         gymKeyLiftIndex: ex.keyLiftIndex || null,
         gymMachine: ex.machine || '',
         gymAlt: ex.alt || '',
         gymSets: setsNum,
+        gymSetChecks,
         gymReps: ex.reps || '',
         gymRest: ex.rest || '',
         gymSetsReps: setsReps,
@@ -2398,6 +2553,8 @@
     buildGymAccountSheets,
     createHabitTasksForDate,
     createWorkoutTasksForDate,
+    normalizeExerciseSetChecks,
+    canonicalizeExerciseId,
     buildGymReviewCsv,
     resolveHabitIdFromTask,
     parseNullableNumber,

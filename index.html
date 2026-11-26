@@ -275,29 +275,28 @@
       <!-- Overdue Unfinished Past Tasks Banner -->
       <div id="overdueBanner" class="hidden bg-amber-500/[0.08] border border-amber-500/25 rounded-2xl p-3.5 flex flex-col gap-2.5"></div>
 
-      <!-- Gym Quick-Load Strip (6-Day PPL A/B + Daily Habits XANH/VÀNG/ĐỎ) -->
+      <!-- Gym Quick-Load Strip (6-Day PPL A/B Per-Set Workout Checklist) -->
       <div id="gymQuickBar" class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08] flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-2 min-w-0">
+        <div class="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0">
             <span class="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 flex items-center justify-center flex-shrink-0">
               <i data-lucide="dumbbell" class="w-3.5 h-3.5"></i>
             </span>
-            <span class="text-xs font-bold text-slate-200 truncate">Gym 6 Buổi</span>
-            <span id="gymQuickActiveGroupBadge" class="hidden text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 truncate max-w-[115px] sm:max-w-[180px]"></span>
+            <span class="text-xs font-bold text-slate-200 whitespace-nowrap">Lịch Tập Gym</span>
           </div>
-          <span id="gymQuickHabitBadge" class="hidden tabular-nums flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap"></span>
+          <span id="gymQuickWorkoutProgress" class="hidden tabular-nums text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 max-w-full truncate"></span>
         </div>
 
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
-          <select id="selectQuickGymGroup" aria-label="Chọn nhóm tập cho ngày này" class="min-w-0 flex-1 bg-slate-950/90 text-xs font-semibold text-slate-100 rounded-xl px-2.5 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500 transition-colors"></select>
-          <div class="grid grid-cols-2 sm:flex items-center gap-1.5 flex-shrink-0">
-            <button type="button" id="btnQuickApplyGymGroup" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/35 text-emerald-300 text-[11px] font-bold whitespace-nowrap transition-colors active:scale-95">
+          <select id="selectQuickGymGroup" aria-label="Chọn buổi tập cho ngày này" class="min-w-0 flex-1 bg-slate-950/90 text-xs font-semibold text-slate-100 rounded-xl px-2.5 py-2 border border-white/[0.08] focus:outline-none focus:border-emerald-500 transition-colors"></select>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <button type="button" id="btnQuickApplyGymGroup" class="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/35 text-emerald-300 text-[11px] font-bold whitespace-nowrap transition-colors active:scale-95">
               <i data-lucide="zap" class="w-3.5 h-3.5 flex-shrink-0"></i>
-              <span>+ / Đổi nhóm tập</span>
+              <span>+ Nạp / Đổi buổi</span>
             </button>
-            <button type="button" id="btnQuickAddGymHabits" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[11px] font-bold whitespace-nowrap transition-colors active:scale-95">
-              <i data-lucide="sparkles" class="w-3.5 h-3.5 flex-shrink-0"></i>
-              <span>+ 6 Thói quen</span>
+            <button type="button" id="btnQuickClearGymGroup" class="hidden flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 text-[11px] font-semibold whitespace-nowrap transition-colors active:scale-95" title="Bỏ buổi tập hôm nay khỏi danh sách">
+              <i data-lucide="x" class="w-3.5 h-3.5 flex-shrink-0"></i>
+              <span>Bỏ buổi tập</span>
             </button>
           </div>
         </div>
@@ -652,7 +651,7 @@
               <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
               <div class="min-w-0">
                 <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Gợi ý điều chỉnh tự động</div>
-                <p id="textGymAutoAdvice" class="text-xs text-slate-200 mt-0.5 leading-snug">Chưa có dữ liệu tuần này — Tick 6 thói quen hàng ngày &amp; check-in sáng Chủ Nhật.</p>
+                <p id="textGymAutoAdvice" class="text-xs text-slate-200 mt-0.5 leading-snug">Chưa có dữ liệu tuần này — Tick đủ hiệp từng bài tập mỗi buổi &amp; check-in sáng Chủ Nhật.</p>
               </div>
             </div>
           </div>
@@ -1082,9 +1081,9 @@
   </footer>
 
   <!-- Gym Plan 6 Buổi Data & Analytics Engine -->
-  <script src="gym-data.js?v=20261125_v1"></script>
+  <script src="gym-data.js?v=20261126_v2"></script>
   <!-- Main JavaScript App -->
-  <script src="app.js?v=20261125_v1"></script>
+  <script src="app.js?v=20261126_v2"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>
