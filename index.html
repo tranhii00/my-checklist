@@ -283,6 +283,7 @@
               <i data-lucide="dumbbell" class="w-3.5 h-3.5"></i>
             </span>
             <span class="text-xs font-bold text-slate-200 whitespace-nowrap">Lịch Tập Gym</span>
+            <span id="gymQuickModePill" class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 whitespace-nowrap">6 buổi LPP</span>
           </div>
           <span id="gymQuickWorkoutProgress" class="hidden tabular-nums text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 max-w-full truncate"></span>
         </div>
@@ -494,18 +495,45 @@
 
         <!-- SUB-VIEW 1: KHO NHÓM TẬP -->
         <div id="gymSubGroupsView" class="flex flex-col gap-3">
-          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-wrap items-center justify-between gap-2">
-            <div class="min-w-0">
-              <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
-                <i data-lucide="layers" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
-                <span class="truncate">Kho Nhóm Tập 6 Buổi PPL A/B</span>
-              </h3>
-              <p id="labelGymGroupsMeta" class="text-[11px] text-slate-400 mt-0.5 tabular-nums">7 nhóm • 40 bài • 12 bài ★ • 119 hiệp/tuần</p>
+          <div class="bg-slate-900/90 rounded-2xl p-3.5 border border-white/[0.08] flex flex-col gap-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="min-w-0">
+                <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                  <i data-lucide="layers" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
+                  <span id="labelGymGroupsTitle" class="truncate">Kho Nhóm Tập · 6 buổi LPP</span>
+                </h3>
+                <p id="labelGymGroupsMeta" class="text-[11px] text-slate-400 mt-0.5 tabular-nums">7 nhóm • 40 bài • 12 bài ★ • 121 hiệp/tuần</p>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <button type="button" id="btnResetAllGymGroups" class="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-500/15 border border-white/[0.08] hover:border-amber-500/35 text-slate-300 hover:text-amber-300 text-xs font-semibold whitespace-nowrap transition-colors active:scale-95" title="Khôi phục giáo án gốc 0-Cáp chuẩn Ways Station">
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                  <span>Reset gốc</span>
+                </button>
+                <button type="button" id="btnOpenNewGymGroupModal" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold whitespace-nowrap transition-colors active:scale-95">
+                  <i data-lucide="plus" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                  <span>Nhóm tập mới</span>
+                </button>
+              </div>
             </div>
-            <button type="button" id="btnOpenNewGymGroupModal" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold whitespace-nowrap transition-colors active:scale-95 flex-shrink-0">
-              <i data-lucide="plus" class="w-3.5 h-3.5 flex-shrink-0"></i>
-              <span>Nhóm tập mới</span>
-            </button>
+
+            <!-- Plan Mode Switcher (6 buổi Leg-Push-Pull vs 5 buổi PPL/UL) + Xem tất cả filter -->
+            <div class="pt-2.5 border-t border-white/[0.06] flex flex-col gap-2">
+              <div class="grid grid-cols-2 gap-1.5 bg-slate-950/90 p-1 rounded-xl border border-white/[0.08]">
+                <button type="button" id="btnPlanModeLpp6" data-plan-mode="lpp_6" class="flex items-center justify-center gap-1.5 py-2 px-2 rounded-[8px] text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]">
+                  <span>6 buổi · Leg–Push–Pull</span>
+                </button>
+                <button type="button" id="btnPlanModePplUl5" data-plan-mode="ppl_ul_5" class="flex items-center justify-center gap-1.5 py-2 px-2 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]">
+                  <span>5 buổi · PPL / UL</span>
+                </button>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p id="labelPlanModeDesc" class="text-[11px] text-slate-400 leading-snug flex-1 min-w-[180px]">Đảo Chân lên T2 để tránh kẹt máy Ngực đầu tuần · Chu kỳ hồi phục chuẩn 72h · 100% máy cắm chốt &amp; tạ đơn (0 cáp mặc định)</p>
+                <button type="button" id="btnToggleShowAllGymGroups" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/[0.08] text-[11px] font-semibold text-slate-300 hover:text-white whitespace-nowrap transition-colors active:scale-95 flex-shrink-0">
+                  <i data-lucide="list-filter" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                  <span id="labelToggleShowAllGymGroups">Xem tất cả</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Inline Collapsible Form: Tạo nhóm tập mới -->
@@ -586,7 +614,7 @@
 
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Buổi tập /6</div>
+                <div id="gymKpiWorkoutsLabel" class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Buổi tập /6</div>
                 <div id="gymKpiWorkouts" class="tabular-nums text-xl font-extrabold text-white mt-1 leading-none">0/6</div>
               </div>
               <div class="bg-slate-900/90 rounded-2xl p-3 border border-white/[0.08]">
@@ -1080,10 +1108,10 @@
     </div>
   </footer>
 
-  <!-- Gym Plan 6 Buổi Data & Analytics Engine -->
-  <script src="gym-data.js?v=20261126_v2"></script>
+  <!-- Gym Plan 6 Buổi LPP & 5 Buổi PPL/UL Data & Analytics Engine -->
+  <script src="gym-data.js?v=20261128_v18"></script>
   <!-- Main JavaScript App -->
-  <script src="app.js?v=20261126_v2"></script>
+  <script src="app.js?v=20261128_v18"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>

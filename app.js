@@ -102,9 +102,13 @@ const STORAGE_KEY_GYM = 'pcl_gym_data_v1';
 const STORAGE_KEY_GYM_DIRTY = 'pcl_gym_dirty_v1';
 let gymData = (typeof window !== 'undefined' && window.GymPlan)
   ? window.GymPlan.getDefaultGymData()
-  : { version: 1, workoutGroups: [], dailyLogs: {}, weeklyCheckins: {}, baseline: {}, updatedAt: 0 };
+  : { version: 2, activePlanMode: 'lpp_6', workoutGroups: [], dailyLogs: {}, weeklyCheckins: {}, baseline: {}, updatedAt: 0 };
 let gymDebounceTimer = null;
 let gymSubTab = 'groups'; // 'groups' | 'review'
+let showAllGymGroups = false;
+let editingGymExKey = null; // 'gid::exId'
+let draggedGymEx = null;    // { gid, exId }
+let draggedDayTaskId = null;
 let selectedGymReviewWeek = (typeof window !== 'undefined' && window.GymPlan)
   ? window.GymPlan.getWeekNumberForDate(selectedDate)
   : 1;
@@ -1731,8 +1735,14 @@ function renderTasksForSelectedDate() {
     emptyPending.classList.remove('hidden');
   } else {
     emptyPending.classList.add('hidden');
+    const pendingGymExTotal = pendingTasks.filter(t => t.gymType === 'exercise').length;
+    let pendingGymExIdx = 0;
     pendingTasks.forEach(task => {
-      pendingContainer.appendChild(createTaskCardElement(task, false));
+      const isPendingGymEx = task.gymType === 'exercise';
+      const cardOpts = isPendingGymEx
+        ? { allowGymReorder: true, gymExIndex: pendingGymExIdx++, gymExTotal: pendingGymExTotal }
+        : {};
+      pendingContainer.appendChild(createTaskCardElement(task, false, cardOpts));
     });
   }
 
@@ -1760,8 +1770,9 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   const doneSets = setChecks.filter(Boolean).length;
   const isPartialSets = isGymExercise && !isCompleted && doneSets > 0 && doneSets < totalSets;
 
+  const canReorderDayEx = isGymExercise && !isCompleted && Boolean(options.allowGymReorder);
   const card = document.createElement('div');
-  card.className = `task-card group flex items-start gap-3 p-3.5 rounded-2xl border transition-colors duration-150 ${
+  card.className = `task-card group flex items-start gap-2.5 sm:gap-3 p-3.5 rounded-2xl border transition-colors duration-150 ${
     isCompleted
       ? (isGymExercise
           ? 'bg-slate-900/60 border-emerald-500/20 opacity-90 hover:opacity-100'
@@ -1770,6 +1781,10 @@ function createTaskCardElement(task, isCompleted, options = {}) {
           ? 'bg-slate-900/95 border-amber-500/35 hover:border-amber-400/55'
           : 'bg-slate-900/90 border-white/[0.08] hover:border-slate-600')
   }`;
+  if (canReorderDayEx) {
+    card.draggable = true;
+    card.setAttribute('data-day-ex-card', task.id);
+  }
 
   // Main Left Checkbox (For Gym Exercises: shows doneSets/totalSets & steps next unticked set; ✓ reopens all sets)
   const checkboxWrapper = document.createElement('button');
@@ -2007,7 +2022,15 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   }
 
   // Inline compact [ ___ kg ] weight logger right on the task card for gym exercises
-  if (task.gymType === 'exercise' && task.gymGroupId !== 'rest_sunday') {
+  const matchedGymGrp = task.gymGroupId
+    ? (gymData?.workoutGroups || []).find(g => g.id === task.gymGroupId)
+    : null;
+  const isRestDayEx = Boolean(
+    matchedGymGrp?.isRestDay ||
+    task.gymGroupId === 'rest_sunday' ||
+    task.gymGroupId === 'rest_midweek'
+  );
+  if (task.gymType === 'exercise' && !isRestDayEx) {
     const prevWeight = window.GymPlan && task.gymExerciseId
       ? window.GymPlan.getLatestExerciseWeight(gymData, appData.tasks, task.gymExerciseId, taskDate)
       : null;
@@ -2133,7 +2156,57 @@ function createTaskCardElement(task, isCompleted, options = {}) {
   };
   actionsGroup.appendChild(deleteBtn);
 
-  card.appendChild(checkboxWrapper);
+  if (canReorderDayEx) {
+    const leftRail = document.createElement('div');
+    leftRail.className = 'flex flex-col items-center gap-1.5 flex-shrink-0';
+    leftRail.appendChild(checkboxWrapper);
+
+    const exIdx = Number(options.gymExIndex) || 0;
+    const exTotal = Number(options.gymExTotal) || 1;
+    const isFirstEx = exIdx <= 0;
+    const isLastEx = exIdx >= exTotal - 1;
+
+    const reorderCol = document.createElement('div');
+    reorderCol.className = 'flex flex-col items-center gap-0.5 pt-0.5';
+    reorderCol.onclick = (e) => e.stopPropagation();
+
+    const gripEl = document.createElement('span');
+    gripEl.className = 'text-slate-600 hover:text-slate-300 cursor-grab active:cursor-grabbing p-0.5 select-none';
+    gripEl.title = 'Kéo thả để đổi thứ tự bài tập';
+    gripEl.innerHTML = '<i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>';
+
+    const btnUp = document.createElement('button');
+    btnUp.type = 'button';
+    btnUp.setAttribute('data-day-ex-move', `${task.id}::up`);
+    btnUp.disabled = isFirstEx;
+    btnUp.title = 'Đưa bài lên trên';
+    btnUp.textContent = '↑';
+    btnUp.className = `w-7 h-5 rounded-md text-[11px] font-bold flex items-center justify-center border transition-colors ${
+      isFirstEx
+        ? 'bg-slate-950/40 text-slate-600 border-white/[0.04] opacity-40 cursor-not-allowed'
+        : 'bg-slate-950/90 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border-white/[0.1] active:scale-90'
+    }`;
+
+    const btnDown = document.createElement('button');
+    btnDown.type = 'button';
+    btnDown.setAttribute('data-day-ex-move', `${task.id}::down`);
+    btnDown.disabled = isLastEx;
+    btnDown.title = 'Đưa bài xuống dưới';
+    btnDown.textContent = '↓';
+    btnDown.className = `w-7 h-5 rounded-md text-[11px] font-bold flex items-center justify-center border transition-colors ${
+      isLastEx
+        ? 'bg-slate-950/40 text-slate-600 border-white/[0.04] opacity-40 cursor-not-allowed'
+        : 'bg-slate-950/90 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border-white/[0.1] active:scale-90'
+    }`;
+
+    reorderCol.appendChild(gripEl);
+    reorderCol.appendChild(btnUp);
+    reorderCol.appendChild(btnDown);
+    leftRail.appendChild(reorderCol);
+    card.appendChild(leftRail);
+  } else {
+    card.appendChild(checkboxWrapper);
+  }
   card.appendChild(contentArea);
   card.appendChild(actionsGroup);
 
@@ -2353,26 +2426,247 @@ function renderAllTasksView() {
 }
 
 // ==========================================
-// 6.5 GYM PLAN 6 BUỔI (QUICK BAR, NHÓM TẬP, REVIEW 12 TUẦN & SHEETS SYNC)
+// 6.5 GYM PLAN 6 BUỔI LPP / 5 BUỔI PPL-UL (QUICK BAR, NHÓM TẬP, REVIEW 12 TUẦN & SHEETS SYNC)
 // ==========================================
+function getActiveGymPlanMode() {
+  const modes = window.GymPlan?.PLAN_MODES || {};
+  const current = gymData?.activePlanMode;
+  if (current && modes[current]) return current;
+  return window.GymPlan?.DEFAULT_PLAN_MODE || 'lpp_6';
+}
+
+function getOrderedGroupsForMode(groups, activeMode) {
+  const modes = window.GymPlan?.PLAN_MODES || {};
+  const modeDef = modes[activeMode] || modes.lpp_6 || { dayMap: {} };
+  const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+  const modeRank = new Map();
+  dayOrder.forEach((dow, idx) => {
+    const gid = modeDef.dayMap?.[dow] ?? modeDef.dayMap?.[String(dow)];
+    if (gid && !modeRank.has(gid)) modeRank.set(gid, idx);
+  });
+  const defaultOrder = new Map(
+    (window.GymPlan?.DEFAULT_WORKOUT_GROUPS || []).map((g, idx) => [g.id, idx])
+  );
+
+  return groups.slice().sort((a, b) => {
+    const aInMode = modeRank.has(a.id) ? 0 : 1;
+    const bInMode = modeRank.has(b.id) ? 0 : 1;
+    if (aInMode !== bInMode) return aInMode - bInMode;
+    if (aInMode === 0) return modeRank.get(a.id) - modeRank.get(b.id);
+    const aDef = defaultOrder.has(a.id) ? defaultOrder.get(a.id) : 999;
+    const bDef = defaultOrder.has(b.id) ? defaultOrder.get(b.id) : 999;
+    return aDef - bDef;
+  });
+}
+
+function setGymPlanMode(modeId) {
+  if (!window.GymPlan || !window.GymPlan.PLAN_MODES?.[modeId]) return;
+  if (gymData.activePlanMode === modeId) return;
+  gymData.activePlanMode = modeId;
+  gymData.updatedAt = Date.now();
+  triggerCloudGymSync();
+  renderGymQuickBar();
+  renderGymGroupsView();
+  if (checklistViewMode === 'gym' && gymSubTab === 'review') {
+    renderGymReviewView();
+  }
+  refreshIcons();
+  const modeDef = window.GymPlan.PLAN_MODES[modeId];
+  showToast(`✓ Đã chuyển sang chế độ ${modeDef.label}!`, 'success');
+}
+
+function resetAllGymGroupsToDefault() {
+  if (!window.GymPlan) return;
+  if (!confirm('Khôi phục toàn bộ nhóm tập mặc định về giáo án gốc 0-Cáp (chuẩn Ways Station)? Dữ liệu log tạ, lịch sử và các nhóm tùy chỉnh của bạn vẫn được giữ nguyên.')) {
+    return;
+  }
+  const now = Date.now();
+  const builtInIds = new Set(window.GymPlan.DEFAULT_WORKOUT_GROUPS.map(g => g.id));
+  const customGroups = (gymData.workoutGroups || []).filter(g => g && !g.isBuiltIn && !builtInIds.has(g.id));
+  const freshBuiltIns = window.GymPlan.DEFAULT_WORKOUT_GROUPS.map((g, idx) => {
+    const cloned = window.GymPlan.cloneWorkoutGroup
+      ? window.GymPlan.cloneWorkoutGroup(g, idx)
+      : JSON.parse(JSON.stringify(g));
+    cloned.updatedAt = now;
+    return cloned;
+  });
+
+  gymData.workoutGroups = [...freshBuiltIns, ...customGroups];
+  gymData.deletedGroupIds = (gymData.deletedGroupIds || []).filter(id => !builtInIds.has(id));
+  gymData.version = 2;
+  gymData.updatedAt = now;
+  editingGymExKey = null;
+
+  triggerCloudGymSync();
+  renderGymQuickBar();
+  renderGymGroupsView();
+  refreshIcons();
+  showToast('✓ Đã khôi phục giáo án gốc 0-Cáp (10 nhóm Ways Station)!', 'success');
+}
+
+function resetSingleGymGroupToDefault(gid) {
+  if (!window.GymPlan || !gid) return;
+  const defGrp = (window.GymPlan.DEFAULT_WORKOUT_GROUPS || []).find(g => g.id === gid);
+  if (!defGrp) return;
+  if (!confirm(`Khôi phục nhóm "${defGrp.name}" về giáo án gốc 0-Cáp (Ways Station)?`)) return;
+
+  const now = Date.now();
+  const fresh = window.GymPlan.cloneWorkoutGroup
+    ? window.GymPlan.cloneWorkoutGroup(defGrp, 0)
+    : JSON.parse(JSON.stringify(defGrp));
+  fresh.updatedAt = now;
+
+  if (!Array.isArray(gymData.workoutGroups)) gymData.workoutGroups = [];
+  const idx = gymData.workoutGroups.findIndex(g => g.id === gid);
+  if (idx >= 0) {
+    gymData.workoutGroups[idx] = fresh;
+  } else {
+    gymData.workoutGroups.push(fresh);
+  }
+  gymData.updatedAt = now;
+  if (editingGymExKey && editingGymExKey.startsWith(`${gid}::`)) {
+    editingGymExKey = null;
+  }
+
+  triggerCloudGymSync();
+  renderGymQuickBar();
+  renderGymGroupsView();
+  refreshIcons();
+  showToast(`✓ Đã khôi phục "${defGrp.name}" về giáo án gốc 0-Cáp!`, 'success');
+}
+
+function normalizeGroupExerciseOrders(grp) {
+  if (!grp || !Array.isArray(grp.exercises)) return;
+  grp.exercises.forEach((ex, i) => {
+    ex.order = i + 1;
+    ex.stt = i + 1;
+  });
+}
+
+function moveGymGroupExercise(gid, exId, direction) {
+  const grp = (gymData.workoutGroups || []).find(g => g.id === gid);
+  if (!grp || !Array.isArray(grp.exercises)) return;
+  const idx = grp.exercises.findIndex(item => item.id === exId);
+  if (idx === -1) return;
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= grp.exercises.length) return;
+
+  [grp.exercises[idx], grp.exercises[targetIdx]] = [grp.exercises[targetIdx], grp.exercises[idx]];
+  normalizeGroupExerciseOrders(grp);
+  grp.updatedAt = Date.now();
+
+  triggerCloudGymSync();
+  renderGymGroupsView();
+  refreshIcons();
+}
+
+function reorderGymGroupExercise(gid, draggedExId, targetExId) {
+  if (!gid || !draggedExId || !targetExId || draggedExId === targetExId) return;
+  const grp = (gymData.workoutGroups || []).find(g => g.id === gid);
+  if (!grp || !Array.isArray(grp.exercises)) return;
+  const fromIdx = grp.exercises.findIndex(item => item.id === draggedExId);
+  const toIdx = grp.exercises.findIndex(item => item.id === targetExId);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+  const [moved] = grp.exercises.splice(fromIdx, 1);
+  grp.exercises.splice(toIdx, 0, moved);
+  normalizeGroupExerciseOrders(grp);
+  grp.updatedAt = Date.now();
+
+  triggerCloudGymSync();
+  renderGymGroupsView();
+  refreshIcons();
+}
+
+function getSortedPendingDayExercises(dateStr) {
+  const targetDate = dateStr || selectedDate;
+  return (appData.tasks || [])
+    .filter(t => getTaskDate(t) === targetDate && t.gymType === 'exercise' && !t.completed)
+    .map((task, idx) => ({ task, idx }))
+    .sort((a, b) => {
+      const ordDiff = (Number(a.task.gymOrder) || 999) - (Number(b.task.gymOrder) || 999);
+      return ordDiff !== 0 ? ordDiff : a.idx - b.idx;
+    })
+    .map(item => item.task);
+}
+
+function applyReorderedDayExercises(orderedPendingList, dateStr) {
+  const targetDate = dateStr || selectedDate;
+  const allDayExercises = (appData.tasks || []).filter(
+    t => getTaskDate(t) === targetDate && t.gymType === 'exercise'
+  );
+  const existingSlots = orderedPendingList.map((t, i) => (Number(t.gymOrder) > 0 ? Number(t.gymOrder) : i + 1));
+  const hasInvalidOrDup = new Set(existingSlots).size !== existingSlots.length;
+  const slots = (hasInvalidOrDup || allDayExercises.length === orderedPendingList.length)
+    ? orderedPendingList.map((_, i) => i + 1)
+    : existingSlots.slice().sort((a, b) => a - b);
+
+  const now = Date.now();
+  orderedPendingList.forEach((t, i) => {
+    t.gymOrder = slots[i];
+    t.updatedAt = now;
+  });
+  appData.updatedAt = now;
+  saveLocalData();
+  renderApp();
+  triggerCloudSync();
+}
+
+function moveDayExerciseOrder(taskId, direction) {
+  const list = getSortedPendingDayExercises(selectedDate);
+  const idx = list.findIndex(t => t.id === taskId);
+  if (idx === -1) return;
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= list.length) return;
+
+  const reordered = list.slice();
+  [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx], reordered[idx]];
+  applyReorderedDayExercises(reordered, selectedDate);
+}
+
+function reorderDayExerciseTasks(draggedId, targetId) {
+  if (!draggedId || !targetId || draggedId === targetId) return;
+  const list = getSortedPendingDayExercises(selectedDate);
+  const fromIdx = list.findIndex(t => t.id === draggedId);
+  const toIdx = list.findIndex(t => t.id === targetId);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+  const reordered = list.slice();
+  const [moved] = reordered.splice(fromIdx, 1);
+  reordered.splice(toIdx, 0, moved);
+  applyReorderedDayExercises(reordered, selectedDate);
+}
+
 function renderGymQuickBar() {
   if (!window.GymPlan) return;
   const selectEl = document.getElementById('selectQuickGymGroup');
   const progressBadge = document.getElementById('gymQuickWorkoutProgress');
   const applyBtn = document.getElementById('btnQuickApplyGymGroup');
   const clearBtn = document.getElementById('btnQuickClearGymGroup');
+  const modePill = document.getElementById('gymQuickModePill');
   if (!selectEl) return;
 
-  const groups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
+  const activeMode = getActiveGymPlanMode();
+  const modeDef = window.GymPlan.PLAN_MODES?.[activeMode];
+  if (modePill && modeDef) {
+    modePill.textContent = modeDef.shortLabel || modeDef.label;
+    modePill.className = activeMode === 'ppl_ul_5'
+      ? 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/30 whitespace-nowrap'
+      : 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 whitespace-nowrap';
+  }
+
+  const rawGroups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
     ? gymData.workoutGroups
     : window.GymPlan.DEFAULT_WORKOUT_GROUPS;
+  const groups = getOrderedGroupsForMode(rawGroups, activeMode);
 
   const summary = window.GymPlan.getDayHabitSummary(selectedDate, gymData, appData.tasks);
-  const suggested = window.GymPlan.getSuggestedGroupForDate(selectedDate, groups);
+  const suggested = window.GymPlan.getSuggestedGroupForDate(selectedDate, groups, activeMode);
   const preferredId = summary.workoutGroupId || suggested?.id || groups[0]?.id || '';
 
-  // Repopulate dropdown preserving user's choice if same date, otherwise defaulting to active/suggested group
+  // Repopulate dropdown preserving user's choice if same date & mode, otherwise defaulting to active/suggested group
   const prevDateAttr = selectEl.getAttribute('data-for-date');
+  const prevModeAttr = selectEl.getAttribute('data-for-mode');
   const currentVal = selectEl.value;
   selectEl.innerHTML = groups.map((g) => {
     const exList = Array.isArray(g.exercises) ? g.exercises : [];
@@ -2380,15 +2674,20 @@ function renderGymQuickBar() {
     const totalSets = exList.reduce((s, e) => s + (Number(e.sets) > 0 ? Number(e.sets) : 0), 0);
     const setsHint = totalSets > 0 ? ` · ${totalSets} hiệp` : '';
     const tag = g.id === suggested?.id ? ' ★ Gợi ý' : '';
-    return `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${exLen} bài${setsHint})${tag}</option>`;
+    const inActiveMode = !g.isBuiltIn || !Array.isArray(g.planModes) || g.planModes.includes(activeMode);
+    const otherModeTag = !inActiveMode
+      ? (Array.isArray(g.planModes) && g.planModes.includes('ppl_ul_5') ? ' [5b]' : ' [6b]')
+      : '';
+    return `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}${otherModeTag} (${exLen} bài${setsHint})${tag}</option>`;
   }).join('');
 
-  if (prevDateAttr === selectedDate && currentVal && groups.some(g => g.id === currentVal)) {
+  if (prevDateAttr === selectedDate && prevModeAttr === activeMode && currentVal && groups.some(g => g.id === currentVal)) {
     selectEl.value = currentVal;
   } else if (preferredId && groups.some(g => g.id === preferredId)) {
     selectEl.value = preferredId;
   }
   selectEl.setAttribute('data-for-date', selectedDate);
+  selectEl.setAttribute('data-for-mode', activeMode);
 
   const hasExercisesOnDate = (appData.tasks || []).some(
     t => getTaskDate(t) === selectedDate && t.gymType === 'exercise'
@@ -2457,7 +2756,8 @@ function maybeAutoLoadTodaysWorkout(shouldSyncCloud = true) {
   const groups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
     ? gymData.workoutGroups
     : window.GymPlan.DEFAULT_WORKOUT_GROUPS;
-  const suggested = window.GymPlan.getSuggestedGroupForDate(todayStr, groups);
+  const activeMode = getActiveGymPlanMode();
+  const suggested = window.GymPlan.getSuggestedGroupForDate(todayStr, groups, activeMode);
   if (!suggested || suggested.isRestDay || !Array.isArray(suggested.exercises) || suggested.exercises.length === 0) {
     autoPopulatedWorkoutDates.add(todayStr);
     return false;
@@ -2636,22 +2936,89 @@ function renderGymSection() {
   refreshIcons();
 }
 
+function getSuggestionTagClass(tag) {
+  const lower = String(tag || '').toLowerCase();
+  if (lower.includes('cáp') || lower.includes('cap')) {
+    return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+  }
+  if (lower.includes('nâng cao') || lower.includes('nang cao')) {
+    return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+  }
+  if (lower.includes('mông') || lower.includes('mong')) {
+    return 'bg-pink-500/15 text-pink-300 border-pink-500/30';
+  }
+  return 'bg-violet-500/15 text-violet-300 border-violet-500/30';
+}
+
+function getGroupSuggestions(group) {
+  if (!group) return [];
+  if (Array.isArray(group.suggestions) && group.suggestions.length > 0) {
+    return group.suggestions;
+  }
+  const defGrp = (window.GymPlan?.DEFAULT_WORKOUT_GROUPS || []).find(d => d.id === group.id);
+  return Array.isArray(defGrp?.suggestions) ? defGrp.suggestions : [];
+}
+
 function renderGymGroupsView() {
   const container = document.getElementById('containerGymGroupsList');
   const metaEl = document.getElementById('labelGymGroupsMeta');
+  const titleEl = document.getElementById('labelGymGroupsTitle');
+  const descEl = document.getElementById('labelPlanModeDesc');
+  const btnLpp6 = document.getElementById('btnPlanModeLpp6');
+  const btnPplUl5 = document.getElementById('btnPlanModePplUl5');
+  const btnShowAll = document.getElementById('btnToggleShowAllGymGroups');
+  const labelShowAll = document.getElementById('labelToggleShowAllGymGroups');
   if (!container || !window.GymPlan) return;
 
-  const groups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
+  const activeMode = getActiveGymPlanMode();
+  const modes = window.GymPlan.PLAN_MODES || {};
+  const modeDef = modes[activeMode] || modes.lpp_6;
+
+  // Update Plan Mode Switcher UI
+  const modeActiveCls = 'flex items-center justify-center gap-1.5 py-2 px-2 rounded-[8px] text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors duration-150 bg-emerald-600 text-white active:scale-[0.99]';
+  const modeInactiveCls = 'flex items-center justify-center gap-1.5 py-2 px-2 rounded-[8px] text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-colors duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-[0.99]';
+  if (btnLpp6) btnLpp6.className = activeMode === 'lpp_6' ? modeActiveCls : modeInactiveCls;
+  if (btnPplUl5) btnPplUl5.className = activeMode === 'ppl_ul_5' ? modeActiveCls : modeInactiveCls;
+  if (titleEl && modeDef) {
+    titleEl.textContent = showAllGymGroups
+      ? 'Kho Nhóm Tập · Tất cả giáo án'
+      : `Kho Nhóm Tập · ${modeDef.shortLabel}`;
+  }
+  if (descEl && modeDef) {
+    descEl.textContent = modeDef.description || '';
+  }
+
+  const allGroups = Array.isArray(gymData.workoutGroups) && gymData.workoutGroups.length > 0
     ? gymData.workoutGroups
     : window.GymPlan.DEFAULT_WORKOUT_GROUPS;
 
-  const activeGroups = groups.filter(g => !g.isRestDay);
+  const modeFilteredGroups = allGroups.filter(
+    g => !g.isBuiltIn || !Array.isArray(g.planModes) || g.planModes.includes(activeMode)
+  );
+  const visibleGroups = getOrderedGroupsForMode(
+    showAllGymGroups ? allGroups : modeFilteredGroups,
+    activeMode
+  );
+
+  if (btnShowAll) {
+    btnShowAll.className = showAllGymGroups
+      ? 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-600/25 hover:bg-cyan-600/35 border border-cyan-400/45 text-[11px] font-bold text-cyan-200 whitespace-nowrap transition-colors active:scale-95 flex-shrink-0'
+      : 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/[0.08] text-[11px] font-semibold text-slate-300 hover:text-white whitespace-nowrap transition-colors active:scale-95 flex-shrink-0';
+  }
+  if (labelShowAll) {
+    labelShowAll.textContent = showAllGymGroups
+      ? `Đang xem tất cả (${allGroups.length})`
+      : `Xem tất cả (${allGroups.length})`;
+  }
+
+  const statsSource = showAllGymGroups ? allGroups : modeFilteredGroups;
+  const activeGroups = statsSource.filter(g => !g.isRestDay);
   const totalExercises = activeGroups.reduce((sum, g) => sum + (g.exercises?.length || 0), 0);
   const totalKeyLifts = activeGroups.reduce((sum, g) => sum + (g.exercises || []).filter(e => e.isKey).length, 0);
   const totalSets = activeGroups.reduce((sum, g) => sum + (g.exercises || []).reduce((s, e) => s + (Number(e.sets) || 0), 0), 0);
 
   if (metaEl) {
-    metaEl.textContent = `${groups.length} nhóm • ${totalExercises} bài tập • ${totalKeyLifts} bài ★ • ${totalSets} hiệp/tuần`;
+    metaEl.textContent = `${visibleGroups.length} nhóm • ${totalExercises} bài tập • ${totalKeyLifts} bài ★ • ${totalSets} hiệp/tuần`;
   }
 
   const today = getTodayDateStr();
@@ -2661,20 +3028,83 @@ function renderGymGroupsView() {
     ? (isTodaySelected ? 'Đổi buổi hôm nay' : `Đổi buổi ${formatShortVNDate(selectedDate)}`)
     : (isTodaySelected ? 'Nạp vào hôm nay' : `Nạp vào ${formatShortVNDate(selectedDate)}`);
 
-  container.innerHTML = groups.map((group) => {
+  const defaultGroupIds = new Set((window.GymPlan.DEFAULT_WORKOUT_GROUPS || []).map(g => g.id));
+
+  container.innerHTML = visibleGroups.map((group) => {
     const isExpanded = expandedGymGroupIds.has(group.id);
     const exercises = Array.isArray(group.exercises) ? group.exercises : [];
     const groupSets = exercises.reduce((s, e) => s + (Number(e.sets) || 0), 0);
     const groupKeys = exercises.filter(e => e.isKey).length;
     const isLoadedToday = daySummary.workoutGroupId === group.id && daySummary.exerciseTotalCount > 0;
     const groupIdEsc = escapeHtml(group.id);
+    const hasDefaultReset = Boolean(group.isBuiltIn && defaultGroupIds.has(group.id));
+    const suggestions = getGroupSuggestions(group);
+    const existingExNames = new Set(exercises.map(e => String(e.name || '').trim().toLowerCase()));
+
+    // Optional plan mode pill when viewing all groups
+    let modeBadgeHtml = '';
+    if (showAllGymGroups && group.isBuiltIn && Array.isArray(group.planModes)) {
+      const has6 = group.planModes.includes('lpp_6');
+      const has5 = group.planModes.includes('ppl_ul_5');
+      if (has6 && !has5) {
+        modeBadgeHtml = '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">6b LPP</span>';
+      } else if (has5 && !has6) {
+        modeBadgeHtml = '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/30">5b PPL/UL</span>';
+      }
+    }
+
+    const suggestionsHtml = suggestions.length > 0 ? `
+      <div class="mt-1 p-2.5 rounded-xl bg-slate-900/75 border border-cyan-500/20 flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-bold text-cyan-300 flex items-center gap-1.5">
+            <span>💡</span>
+            <span>Gợi ý thêm bài (Cáp / Nâng cao)</span>
+          </span>
+          <span class="tabular-nums text-[10px] text-slate-400">${suggestions.length} gợi ý</span>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          ${suggestions.map((sug, sugIdx) => {
+            const alreadyHas = existingExNames.has(String(sug.name || '').trim().toLowerCase());
+            const tagCls = getSuggestionTagClass(sug.tag);
+            const sugSetsTxt = Number(sug.sets) > 0 ? `${sug.sets} × ${sug.reps || '10-12'}` : (sug.reps || '');
+            return `
+              <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-950/75 border border-white/[0.06]">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    ${sug.tag ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${tagCls}">${escapeHtml(sug.tag)}</span>` : ''}
+                    <span class="text-xs font-semibold text-slate-100 break-words">${escapeHtml(sug.name)}</span>
+                    ${alreadyHas ? '<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">Đã có</span>' : ''}
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-0.5 break-words">
+                    ${sug.machine ? escapeHtml(sug.machine) : ''}${sugSetsTxt ? ` • ${escapeHtml(sugSetsTxt)}` : ''}${sug.rest && sug.rest !== '-' ? ` · ${escapeHtml(sug.rest)}` : ''}
+                  </div>
+                </div>
+                <button type="button" data-gym-add-sug="${groupIdEsc}::${sugIdx}" class="px-2.5 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/35 border border-cyan-500/35 text-cyan-200 text-[11px] font-bold whitespace-nowrap flex-shrink-0 transition-colors active:scale-95">
+                  + Thêm
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : '';
 
     const exercisesHtml = isExpanded ? `
       <div class="border-t border-white/[0.06] bg-slate-950/50 p-3 flex flex-col gap-2">
-        ${group.priorityNote ? `
-          <div class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
-            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 flex-shrink-0"></i>
-            <span>${escapeHtml(group.priorityNote)}</span>
+        ${(group.priorityNote || hasDefaultReset) ? `
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            ${group.priorityNote ? `
+              <div class="flex-1 min-w-[200px] px-2.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
+                <i data-lucide="alert-triangle" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                <span>${escapeHtml(group.priorityNote)}</span>
+              </div>
+            ` : '<span class="text-[10px] text-slate-500">Kéo thả hoặc bấm ↑/↓ để đổi thứ tự bài tập</span>'}
+            ${hasDefaultReset ? `
+              <button type="button" data-gym-reset-group="${groupIdEsc}" class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-amber-500/15 border border-white/[0.08] hover:border-amber-500/35 text-slate-300 hover:text-amber-300 text-[11px] font-semibold whitespace-nowrap transition-colors active:scale-95 flex-shrink-0" title="Khôi phục nhóm này về giáo án gốc 0-Cáp">
+                <i data-lucide="rotate-ccw" class="w-3 h-3 flex-shrink-0"></i>
+                <span>Reset nhóm</span>
+              </button>
+            ` : ''}
           </div>
         ` : ''}
         <div class="flex flex-col gap-1.5">
@@ -2682,11 +3112,46 @@ function renderGymGroupsView() {
             <p class="text-xs text-slate-500 text-center py-3">Nhóm này chưa có bài tập nào. Thêm bài tập ở form bên dưới!</p>
           ` : exercises.map((ex, idx) => {
             const exIdEsc = escapeHtml(ex.id);
+            const editKey = `${group.id}::${ex.id}`;
+            const isEditing = editingGymExKey === editKey;
+            if (isEditing) {
+              return `
+                <form data-gym-save-ex-form="${groupIdEsc}::${exIdEsc}" class="p-2.5 rounded-xl bg-slate-900 border border-emerald-500/45 flex flex-col gap-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-bold text-emerald-300">Sửa nhanh bài #${idx + 1}</span>
+                    <button type="button" data-gym-cancel-edit-ex="1" class="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded-md bg-slate-800">Hủy</button>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <input type="text" name="exName" required value="${escapeHtml(ex.name)}" placeholder="Tên bài tập..." class="w-full bg-slate-950 text-xs text-white rounded-lg px-2.5 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500">
+                    <input type="text" name="exMachine" value="${escapeHtml(ex.machine || '')}" placeholder="Máy tập / dụng cụ..." class="w-full bg-slate-950 text-xs text-white rounded-lg px-2.5 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500">
+                  </div>
+                  <input type="text" name="exAlt" value="${escapeHtml(ex.alt || '')}" placeholder="Bài thay thế (khi máy bận)..." class="w-full bg-slate-950 text-xs text-white rounded-lg px-2.5 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <input type="number" name="exSets" value="${Number.isFinite(Number(ex.sets)) ? Number(ex.sets) : 3}" min="0" max="12" class="w-16 tabular-nums bg-slate-950 text-xs text-white rounded-lg px-2 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500" title="Số hiệp">
+                    <input type="text" name="exReps" value="${escapeHtml(ex.reps || '8-12')}" placeholder="Rep" class="w-20 bg-slate-950 text-xs text-white rounded-lg px-2 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500" title="Số rep">
+                    <input type="text" name="exRest" value="${escapeHtml(ex.rest || '90s')}" placeholder="Nghỉ" class="w-16 bg-slate-950 text-xs text-white rounded-lg px-2 py-1.5 border border-white/[0.1] focus:outline-none focus:border-emerald-500" title="Thời gian nghỉ">
+                    <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-300 bg-amber-500/10 px-2 py-1.5 rounded-lg border border-amber-500/25 cursor-pointer select-none">
+                      <input type="checkbox" name="exIsKey" ${ex.isKey ? 'checked' : ''} class="accent-amber-400">
+                      <span>★ Chủ lực</span>
+                    </label>
+                    <button type="submit" class="ml-auto px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors active:scale-95 whitespace-nowrap">
+                      Lưu bài
+                    </button>
+                  </div>
+                </form>
+              `;
+            }
+
             const latestKg = window.GymPlan.getLatestExerciseWeight(gymData, appData.tasks, ex.id, '');
             const setsText = Number(ex.sets) > 0 ? `${ex.sets} × ${ex.reps || '10-12'}` : (ex.reps || '');
+            const isFirst = idx === 0;
+            const isLast = idx === exercises.length - 1;
             return `
-              <div class="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-white/[0.06]">
-                <div class="flex items-start gap-2 min-w-0 flex-1">
+              <div draggable="true" data-gym-ex-row="${groupIdEsc}::${exIdEsc}" class="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-white/[0.06] transition-colors">
+                <div class="flex items-start gap-1.5 sm:gap-2 min-w-0 flex-1">
+                  <span class="mt-1 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing flex-shrink-0 select-none" title="Kéo thả để đổi thứ tự">
+                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                  </span>
                   <button type="button" data-gym-toggle-key="${groupIdEsc}::${exIdEsc}" class="mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 border transition-colors active:scale-90 ${
                     ex.isKey
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
@@ -2704,13 +3169,34 @@ function renderGymGroupsView() {
                     </div>
                   </div>
                 </div>
-                <button type="button" data-gym-del-ex="${groupIdEsc}::${exIdEsc}" class="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 flex-shrink-0 transition-colors" title="Xóa bài tập này">
-                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                </button>
+                <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                  <div class="flex items-center gap-1">
+                    <button type="button" data-gym-move-ex="${groupIdEsc}::${exIdEsc}::up" ${isFirst ? 'disabled' : ''} class="w-6 h-6 rounded-lg text-[11px] font-bold flex items-center justify-center border transition-colors ${
+                      isFirst
+                        ? 'bg-slate-950/40 text-slate-600 border-white/[0.04] opacity-40 cursor-not-allowed'
+                        : 'bg-slate-950/90 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border-white/[0.1] active:scale-90'
+                    }" title="Đưa lên trên">↑</button>
+                    <button type="button" data-gym-move-ex="${groupIdEsc}::${exIdEsc}::down" ${isLast ? 'disabled' : ''} class="w-6 h-6 rounded-lg text-[11px] font-bold flex items-center justify-center border transition-colors ${
+                      isLast
+                        ? 'bg-slate-950/40 text-slate-600 border-white/[0.04] opacity-40 cursor-not-allowed'
+                        : 'bg-slate-950/90 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border-white/[0.1] active:scale-90'
+                    }" title="Đưa xuống dưới">↓</button>
+                  </div>
+                  <div class="flex items-center gap-0.5">
+                    <button type="button" data-gym-edit-ex="${groupIdEsc}::${exIdEsc}" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 flex-shrink-0 transition-colors" title="Sửa nhanh bài tập">
+                      <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button type="button" data-gym-del-ex="${groupIdEsc}::${exIdEsc}" class="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 flex-shrink-0 transition-colors" title="Xóa bài tập này">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
             `;
           }).join('')}
         </div>
+
+        ${suggestionsHtml}
 
         <!-- Inline Add Custom Exercise Form -->
         <form data-gym-add-ex-form="${groupIdEsc}" class="mt-1 p-2.5 rounded-xl bg-slate-900/80 border border-dashed border-white/[0.12] flex flex-col gap-2">
@@ -2746,6 +3232,7 @@ function renderGymGroupsView() {
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="text-sm font-bold text-white">${escapeHtml(group.name)}</span>
+                  ${modeBadgeHtml}
                   ${isLoadedToday ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">Đang nạp</span>' : ''}
                   ${group.priorityLegs ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">Ưu tiên Chân</span>' : ''}
                 </div>
@@ -2760,6 +3247,7 @@ function renderGymGroupsView() {
               <span class="px-2 py-0.5 rounded-md bg-slate-950/80 border border-white/[0.06] text-slate-300">${exercises.length} bài</span>
               ${groupSets > 0 ? `<span class="px-2 py-0.5 rounded-md bg-slate-950/80 border border-white/[0.06] text-slate-300">${groupSets} hiệp</span>` : ''}
               ${groupKeys > 0 ? `<span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/25 text-amber-300">${groupKeys} ★</span>` : ''}
+              ${suggestions.length > 0 ? `<span class="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">💡 ${suggestions.length}</span>` : ''}
             </div>
 
             <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -2783,7 +3271,8 @@ function renderGymGroupsView() {
 function renderGymReviewView() {
   if (!window.GymPlan) return;
   const analytics = window.GymPlan.computeWeeklyAnalytics(gymData, appData.tasks);
-  const { baseline, weeks, totals, keyLiftsSummary, dailyHistory } = analytics;
+  const { baseline, weeks, totals, keyLiftsSummary, dailyHistory, targetSessionsPerWeek } = analytics;
+  const targetSessions = targetSessionsPerWeek || 6;
 
   // 1. Summary subtitle
   const summaryEl = document.getElementById('labelGymProgramSummary');
@@ -2799,7 +3288,7 @@ function renderGymReviewView() {
   if (weekSelect) {
     weekSelect.innerHTML = weeks.map((wk) => {
       const rangeStr = `${window.GymPlan.formatVnDateShort(wk.mondayDate)}–${window.GymPlan.formatVnDateShort(wk.sundayDate)}`;
-      const tag = wk.hasActivity ? ` · ${wk.sessionsCount}/6` : '';
+      const tag = wk.hasActivity ? ` · ${wk.sessionsCount}/${targetSessions}` : '';
       return `<option value="${wk.weekNum}">${escapeHtml(wk.code)} (${rangeStr})${tag}</option>`;
     }).join('');
     weekSelect.value = String(selectedGymReviewWeek);
@@ -2814,11 +3303,13 @@ function renderGymReviewView() {
   }
 
   // 3. 4 Compact KPI cards
+  const kpiWorkoutsLabel = document.getElementById('gymKpiWorkoutsLabel');
   const kpiWorkouts = document.getElementById('gymKpiWorkouts');
   const kpiClean = document.getElementById('gymKpiCleanEat');
   const kpiSteps = document.getElementById('gymKpiStepsSleep');
   const kpiGreen = document.getElementById('gymKpiGreenDays');
-  if (kpiWorkouts) kpiWorkouts.textContent = `${wk.sessionsCount}/6`;
+  if (kpiWorkoutsLabel) kpiWorkoutsLabel.textContent = `Buổi tập /${targetSessions}`;
+  if (kpiWorkouts) kpiWorkouts.textContent = `${wk.sessionsCount}/${targetSessions}`;
   if (kpiClean) kpiClean.textContent = `${wk.cleanEatingDays}/7`;
   if (kpiSteps) kpiSteps.textContent = `${wk.stepsSleepDays}/7`;
   if (kpiGreen) kpiGreen.textContent = String(wk.greenDays);
@@ -2896,7 +3387,7 @@ function renderGymReviewView() {
       const gainCls = kl.gainKg !== null && kl.gainKg > 0
         ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
         : 'bg-slate-800/80 text-slate-400 border-white/[0.06]';
-      const placeholder = kl.latestKg !== null ? `${kl.latestKg}` : 'kg';
+      const placeholder = kl.latestWeightKg !== null && kl.latestWeightKg !== undefined ? `${kl.latestWeightKg}` : 'kg';
 
       return `
         <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-white/[0.06]">
@@ -4452,6 +4943,105 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnGymSubGroups) btnGymSubGroups.onclick = () => setGymSubTab('groups');
   if (btnGymSubReview) btnGymSubReview.onclick = () => setGymSubTab('review');
 
+  // Plan Mode Switcher, Xem tất cả filter & Reset gốc button
+  const btnPlanModeLpp6 = document.getElementById('btnPlanModeLpp6');
+  const btnPlanModePplUl5 = document.getElementById('btnPlanModePplUl5');
+  const btnToggleShowAll = document.getElementById('btnToggleShowAllGymGroups');
+  const btnResetAllGym = document.getElementById('btnResetAllGymGroups');
+  if (btnPlanModeLpp6) btnPlanModeLpp6.onclick = () => setGymPlanMode('lpp_6');
+  if (btnPlanModePplUl5) btnPlanModePplUl5.onclick = () => setGymPlanMode('ppl_ul_5');
+  if (btnToggleShowAll) {
+    btnToggleShowAll.onclick = () => {
+      showAllGymGroups = !showAllGymGroups;
+      renderGymGroupsView();
+      refreshIcons();
+    };
+  }
+  if (btnResetAllGym) btnResetAllGym.onclick = () => resetAllGymGroupsToDefault();
+
+  // Tab "Theo ngày": Delegated Up/Down reorder & Drag-and-Drop for pending Gym exercises
+  const pendingListEl = document.getElementById('listPendingTasks');
+  if (pendingListEl) {
+    let dayPointerOnInput = false;
+    pendingListEl.addEventListener('pointerdown', (e) => {
+      dayPointerOnInput = Boolean(e.target.closest('input, textarea, select'));
+    });
+
+    pendingListEl.addEventListener('click', (e) => {
+      const moveBtn = e.target.closest('[data-day-ex-move]');
+      if (!moveBtn) return;
+      e.stopPropagation();
+      const raw = moveBtn.getAttribute('data-day-ex-move') || '';
+      const sepIdx = raw.lastIndexOf('::');
+      if (sepIdx === -1) return;
+      const taskId = raw.slice(0, sepIdx);
+      const dir = raw.slice(sepIdx + 2);
+      if (taskId && (dir === 'up' || dir === 'down')) {
+        moveDayExerciseOrder(taskId, dir);
+      }
+    });
+
+    const clearDayDragHighlights = () => {
+      pendingListEl.querySelectorAll('[data-day-ex-card]').forEach(el => {
+        el.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40', 'opacity-50');
+      });
+    };
+
+    pendingListEl.addEventListener('dragstart', (e) => {
+      if (dayPointerOnInput) {
+        e.preventDefault();
+        return;
+      }
+      const card = e.target.closest('[data-day-ex-card]');
+      if (!card) return;
+      draggedDayTaskId = card.getAttribute('data-day-ex-card');
+      if (!draggedDayTaskId) return;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedDayTaskId); } catch (_) {}
+      card.classList.add('opacity-50');
+    });
+
+    pendingListEl.addEventListener('dragover', (e) => {
+      if (!draggedDayTaskId) return;
+      const card = e.target.closest('[data-day-ex-card]');
+      if (!card) return;
+      const targetId = card.getAttribute('data-day-ex-card');
+      if (!targetId || targetId === draggedDayTaskId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      pendingListEl.querySelectorAll('[data-day-ex-card]').forEach(el => {
+        if (el !== card) el.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40');
+      });
+      card.classList.add('border-emerald-400', 'ring-1', 'ring-emerald-400/40');
+    });
+
+    pendingListEl.addEventListener('dragleave', (e) => {
+      const card = e.target.closest('[data-day-ex-card]');
+      if (card && !card.contains(e.relatedTarget)) {
+        card.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40');
+      }
+    });
+
+    pendingListEl.addEventListener('drop', (e) => {
+      if (!draggedDayTaskId) return;
+      const card = e.target.closest('[data-day-ex-card]');
+      const targetId = card ? card.getAttribute('data-day-ex-card') : null;
+      const sourceId = draggedDayTaskId;
+      draggedDayTaskId = null;
+      clearDayDragHighlights();
+      if (targetId && targetId !== sourceId) {
+        e.preventDefault();
+        reorderDayExerciseTasks(sourceId, targetId);
+      }
+    });
+
+    pendingListEl.addEventListener('dragend', () => {
+      draggedDayTaskId = null;
+      dayPointerOnInput = false;
+      clearDayDragHighlights();
+    });
+  }
+
   const btnOpenNewGroup = document.getElementById('btnOpenNewGymGroupModal');
   const panelNewGroup = document.getElementById('panelNewGymGroupForm');
   const btnCancelNewGroup = document.getElementById('btnCancelNewGymGroup');
@@ -4488,6 +5078,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shortDay: '',
         dayOfWeek: dowRaw === '' ? null : Number(dowRaw),
         dayLabel: '',
+        planModes: ['lpp_6', 'ppl_ul_5'],
         focus: focusEl ? focusEl.value.trim() : '',
         priorityNote: '',
         isRestDay: false,
@@ -4495,7 +5086,8 @@ document.addEventListener('DOMContentLoaded', () => {
         priorityLegs: false,
         color: '#8b5cf6',
         updatedAt: now,
-        exercises: []
+        exercises: [],
+        suggestions: []
       };
 
       if (!Array.isArray(gymData.workoutGroups)) gymData.workoutGroups = [];
@@ -4517,11 +5109,22 @@ document.addEventListener('DOMContentLoaded', () => {
   // Delegated interactions inside Workout Groups list
   const groupsListEl = document.getElementById('containerGymGroupsList');
   if (groupsListEl) {
+    let gymPointerOnInput = false;
+    groupsListEl.addEventListener('pointerdown', (e) => {
+      gymPointerOnInput = Boolean(e.target.closest('input, textarea, select'));
+    });
+
     groupsListEl.addEventListener('click', (e) => {
       const applyBtn = e.target.closest('[data-gym-apply-group]');
       if (applyBtn) {
         const gid = applyBtn.getAttribute('data-gym-apply-group');
         if (gid) applyGymGroupToDate(gid, selectedDate, true);
+        return;
+      }
+      const resetGroupBtn = e.target.closest('[data-gym-reset-group]');
+      if (resetGroupBtn) {
+        const gid = resetGroupBtn.getAttribute('data-gym-reset-group');
+        if (gid) resetSingleGymGroupToDefault(gid);
         return;
       }
       const delGroupBtn = e.target.closest('[data-gym-del-group]');
@@ -4537,6 +5140,67 @@ document.addEventListener('DOMContentLoaded', () => {
         renderGymGroupsView();
         refreshIcons();
         showToast('Đã xóa nhóm tập tùy chỉnh.', 'info');
+        return;
+      }
+      const moveExBtn = e.target.closest('[data-gym-move-ex]');
+      if (moveExBtn) {
+        const parts = (moveExBtn.getAttribute('data-gym-move-ex') || '').split('::');
+        const [gid, exId, dir] = parts;
+        if (gid && exId && (dir === 'up' || dir === 'down')) {
+          moveGymGroupExercise(gid, exId, dir);
+        }
+        return;
+      }
+      const editExBtn = e.target.closest('[data-gym-edit-ex]');
+      if (editExBtn) {
+        const key = editExBtn.getAttribute('data-gym-edit-ex');
+        editingGymExKey = editingGymExKey === key ? null : key;
+        renderGymGroupsView();
+        refreshIcons();
+        return;
+      }
+      const cancelEditBtn = e.target.closest('[data-gym-cancel-edit-ex]');
+      if (cancelEditBtn) {
+        editingGymExKey = null;
+        renderGymGroupsView();
+        refreshIcons();
+        return;
+      }
+      const addSugBtn = e.target.closest('[data-gym-add-sug]');
+      if (addSugBtn) {
+        const [gid, idxStr] = (addSugBtn.getAttribute('data-gym-add-sug') || '').split('::');
+        const sugIdx = Number(idxStr);
+        const grp = (gymData.workoutGroups || []).find(g => g.id === gid);
+        if (!grp || !Number.isInteger(sugIdx) || sugIdx < 0) return;
+        const suggestions = getGroupSuggestions(grp);
+        const sug = suggestions[sugIdx];
+        if (!sug || !sug.name) return;
+
+        const now = Date.now();
+        if (!Array.isArray(grp.exercises)) grp.exercises = [];
+        const nextOrder = grp.exercises.length + 1;
+        grp.exercises.push({
+          id: `ex_sug_${now}_${Math.random().toString(36).slice(2, 5)}`,
+          order: nextOrder,
+          stt: nextOrder,
+          isKey: false,
+          keyLiftIndex: null,
+          excelRow: null,
+          name: String(sug.name).trim(),
+          machine: String(sug.machine || '').trim(),
+          alt: String(sug.alt || '').trim(),
+          sets: Number.isFinite(Number(sug.sets)) && Number(sug.sets) > 0 ? Number(sug.sets) : 3,
+          reps: String(sug.reps || '10-12').trim(),
+          rir: '0-1',
+          rest: String(sug.rest || '90s').trim()
+        });
+        grp.updatedAt = now;
+
+        triggerCloudGymSync();
+        renderGymQuickBar();
+        renderGymGroupsView();
+        refreshIcons();
+        showToast(`✓ Đã thêm "${sug.name}" vào cuối ${grp.name}!`, 'success');
         return;
       }
       const toggleKeyBtn = e.target.closest('[data-gym-toggle-key]');
@@ -4561,7 +5225,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (grp && Array.isArray(grp.exercises)) {
           if (!confirm('Xóa bài tập này khỏi nhóm tập?')) return;
           grp.exercises = grp.exercises.filter(item => item.id !== exId);
+          normalizeGroupExerciseOrders(grp);
           grp.updatedAt = Date.now();
+          if (editingGymExKey === `${gid}::${exId}`) editingGymExKey = null;
           triggerCloudGymSync();
           renderGymQuickBar();
           renderGymGroupsView();
@@ -4583,6 +5249,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     groupsListEl.addEventListener('submit', (e) => {
+      const saveExForm = e.target.closest('[data-gym-save-ex-form]');
+      if (saveExForm) {
+        e.preventDefault();
+        const [gid, exId] = (saveExForm.getAttribute('data-gym-save-ex-form') || '').split('::');
+        const grp = (gymData.workoutGroups || []).find(g => g.id === gid);
+        const ex = grp && (grp.exercises || []).find(item => item.id === exId);
+        if (!ex) return;
+
+        const nextName = (saveExForm.elements.exName?.value || '').trim();
+        if (!nextName) return;
+        ex.name = nextName;
+        ex.machine = (saveExForm.elements.exMachine?.value || '').trim();
+        ex.alt = (saveExForm.elements.exAlt?.value || '').trim();
+        const parsedSets = Number(saveExForm.elements.exSets?.value);
+        ex.sets = Number.isFinite(parsedSets) && parsedSets >= 0 ? Math.round(parsedSets) : (ex.sets || 3);
+        ex.reps = (saveExForm.elements.exReps?.value || '8-12').trim();
+        ex.rest = (saveExForm.elements.exRest?.value || '90s').trim();
+        ex.isKey = Boolean(saveExForm.elements.exIsKey?.checked);
+        grp.updatedAt = Date.now();
+        editingGymExKey = null;
+
+        triggerCloudGymSync();
+        renderGymQuickBar();
+        renderGymGroupsView();
+        refreshIcons();
+        showToast(`✓ Đã cập nhật bài "${ex.name}"!`, 'success');
+        return;
+      }
+
       const form = e.target.closest('[data-gym-add-ex-form]');
       if (!form) return;
       e.preventDefault();
@@ -4617,6 +5312,68 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGymGroupsView();
       refreshIcons();
       showToast(`✓ Đã thêm bài "${name}" vào ${grp.name}!`, 'success');
+    });
+
+    // Drag-and-Drop reordering for exercise rows inside Kho Nhóm Tập
+    const clearGymDragHighlights = () => {
+      groupsListEl.querySelectorAll('[data-gym-ex-row]').forEach(el => {
+        el.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40', 'bg-emerald-500/[0.06]', 'opacity-50');
+      });
+    };
+
+    groupsListEl.addEventListener('dragstart', (e) => {
+      if (gymPointerOnInput) {
+        e.preventDefault();
+        return;
+      }
+      const row = e.target.closest('[data-gym-ex-row]');
+      if (!row) return;
+      const [gid, exId] = (row.getAttribute('data-gym-ex-row') || '').split('::');
+      if (!gid || !exId) return;
+      draggedGymEx = { gid, exId };
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', `${gid}::${exId}`); } catch (_) {}
+      row.classList.add('opacity-50');
+    });
+
+    groupsListEl.addEventListener('dragover', (e) => {
+      if (!draggedGymEx) return;
+      const row = e.target.closest('[data-gym-ex-row]');
+      if (!row) return;
+      const [gid, exId] = (row.getAttribute('data-gym-ex-row') || '').split('::');
+      if (!gid || !exId || gid !== draggedGymEx.gid || exId === draggedGymEx.exId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      groupsListEl.querySelectorAll('[data-gym-ex-row]').forEach(el => {
+        if (el !== row) el.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40', 'bg-emerald-500/[0.06]');
+      });
+      row.classList.add('border-emerald-400', 'ring-1', 'ring-emerald-400/40', 'bg-emerald-500/[0.06]');
+    });
+
+    groupsListEl.addEventListener('dragleave', (e) => {
+      const row = e.target.closest('[data-gym-ex-row]');
+      if (row && !row.contains(e.relatedTarget)) {
+        row.classList.remove('border-emerald-400', 'ring-1', 'ring-emerald-400/40', 'bg-emerald-500/[0.06]');
+      }
+    });
+
+    groupsListEl.addEventListener('drop', (e) => {
+      if (!draggedGymEx) return;
+      const row = e.target.closest('[data-gym-ex-row]');
+      const [gid, targetExId] = row ? (row.getAttribute('data-gym-ex-row') || '').split('::') : [];
+      const src = draggedGymEx;
+      draggedGymEx = null;
+      clearGymDragHighlights();
+      if (gid && targetExId && gid === src.gid && targetExId !== src.exId) {
+        e.preventDefault();
+        reorderGymGroupExercise(gid, src.exId, targetExId);
+      }
+    });
+
+    groupsListEl.addEventListener('dragend', () => {
+      draggedGymEx = null;
+      gymPointerOnInput = false;
+      clearGymDragHighlights();
     });
   }
 

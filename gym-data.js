@@ -1,8 +1,8 @@
 /**
- * Gym Plan 6 Buổi (PPL A/B) — Canonical Data, Analytics & 2-Way Merge Engine
+ * Gym Plan 6 Buổi (Leg–Push–Pull) & 5 Buổi (PPL / UL) — Canonical Data v2, Analytics & 2-Way Merge Engine
  * Standalone browser script attaching window.GymPlan (zero ES module imports needed for PWA + SW).
- * 100% schema-aligned with gym_data.json on GitHub Gist, Desktop Frontend (gymPlanData.js),
- * Backend (gymDatabaseService.js), and Excel (03_WEEKLY_REVIEW_DON_GIAN.xlsx).
+ * 100% schema-aligned with canonical_v2_lpp_pplul.json, gym_data.json on GitHub Gist,
+ * Desktop Frontend (gymPlanData.js), Backend (gymDatabaseService.js), and Excel (03_WEEKLY_REVIEW_DON_GIAN.xlsx).
  */
 (function (root) {
   'use strict';
@@ -11,6 +11,43 @@
 
   // Sunday of Week 1 (T1) — matches Sheet 1_Review_Cuoi_Tuan cell B11 (2026-11-01)
   const PLAN_START_SUNDAY = '2026-11-01';
+
+  const DEFAULT_PLAN_MODE = 'lpp_6';
+
+  const PLAN_MODES = {
+    lpp_6: {
+      id: 'lpp_6',
+      label: '6 buổi · Leg–Push–Pull',
+      shortLabel: '6 buổi LPP',
+      sessionsPerWeek: 6,
+      description: 'Đảo Chân lên T2 để tránh kẹt máy Ngực đầu tuần · Chu kỳ hồi phục chuẩn 72h · 100% máy cắm chốt & tạ đơn (0 cáp mặc định)',
+      dayMap: {
+        1: 'legs_a',
+        2: 'push_a',
+        3: 'pull_a',
+        4: 'legs_b',
+        5: 'push_b',
+        6: 'pull_b',
+        0: 'rest_sunday'
+      }
+    },
+    ppl_ul_5: {
+      id: 'ppl_ul_5',
+      label: '5 buổi · PPL / UL',
+      shortLabel: '5 buổi PPL/UL',
+      sessionsPerWeek: 5,
+      description: 'T2 Legs · T3 Push · T4 Pull · T5 Nghỉ giữa tuần · T6 Lower · T7 Upper · CN Nghỉ · Đủ 2 lần/tuần mỗi nhóm cơ khi bận',
+      dayMap: {
+        1: 'legs_a',
+        2: 'push_a',
+        3: 'pull_a',
+        4: 'rest_midweek',
+        5: 'ul_lower',
+        6: 'ul_upper',
+        0: 'rest_sunday'
+      }
+    }
+  };
 
   // Verbatim InBody 270 baseline (25/10/2026) & 12-16 week 6-pack target
   const DEFAULT_BASELINE = {
@@ -99,901 +136,1479 @@
     }
   ];
 
-  // Verbatim 6 built-in sessions (40 exercises, 119 sets, 12 ★ key lifts) + Sunday rest
-  // Exact match to Sheet 2_Lich_Tap_6_Buoi Rows 6..45
+  // Canonical v2 — 10 built-in workout groups (6-day LPP + 5-day PPL/UL, 0-Cable default Ways Station)
   const DEFAULT_WORKOUT_GROUPS = [
     {
-      id: 'push_a',
-      name: 'T2 - Push A',
-      shortName: 'Push A',
-      shortDay: 'T2',
-      dayOfWeek: 1,
-      dayLabel: 'Thứ Hai',
-      focus: 'Ngực trên/ngang + Vai ngang + Tay sau',
-      priorityNote: '',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: false,
-      color: '#10b981',
-      exercises: [
+      "id": "legs_a",
+      "name": "T2 - Legs A",
+      "shortName": "Legs A",
+      "shortDay": "T2",
+      "dayOfWeek": 1,
+      "dayLabel": "Thứ Hai",
+      "planModes": [
+        "lpp_6",
+        "ppl_ul_5"
+      ],
+      "focus": "Ưu tiên Chân (<100% InBody) đầu tuần tránh kẹt máy Ngực T2 — Đùi trước, Đùi sau & Bắp chân",
+      "priorityNote": "KHÔNG BỎ BUỔI NÀY — T2 máy Chân trống nhất phòng, kéo 2 chân từ 98–99% lên >100%!",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": true,
+      "color": "#f59e0b",
+      "exercises": [
         {
-          id: 'ex_push_a_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 1,
-          excelRow: 6,
-          name: 'Incline Chest Press Machine',
-          machine: 'Máy đẩy ngực trên ngồi (Hammer Strength / Technogym)',
-          alt: 'Smith Machine Incline Press 30° / Incline DB Press',
-          sets: 3,
-          reps: '8-10',
-          rir: '1-2',
-          rest: '2.5-3p'
+          "id": "ex_legs_a_3",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 6,
+          "excelRow": 11,
+          "name": "Seated Leg Curl Machine",
+          "machine": "Máy móc đùi sau ngồi (Seated Leg Curl)",
+          "alt": "Lying Leg Curl Machine (tập đầu buổi để làm ấm khớp gối)",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s-2p"
         },
         {
-          id: 'ex_push_a_2',
-          order: 2,
-          stt: 2,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Flat Converging Chest Press Machine',
-          machine: 'Máy đẩy ngực ngang hội tụ (Converging Chest Press)',
-          alt: 'Smith Machine Flat Press / Dumbbell Bench Press',
-          sets: 3,
-          reps: '8-12',
-          rir: '1-2',
-          rest: '2-2.5p'
+          "id": "ex_legs_a_1",
+          "order": 2,
+          "stt": 2,
+          "isKey": true,
+          "keyLiftIndex": 5,
+          "excelRow": 10,
+          "name": "Hack Squat Machine",
+          "machine": "Máy Squat trượt nghiêng 45° (Hack Squat)",
+          "alt": "Smith Machine Squat (chân đặt hơi trước)",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2.5-3p"
         },
         {
-          id: 'ex_push_a_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Pec Deck Fly Machine',
-          machine: 'Máy ép ngực bướm (Pec Deck / Butterfly)',
-          alt: 'Seated Cable Chest Fly',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_legs_a_2",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "45° Leg Press Machine (chân thấp-giữa)",
+          "machine": "Máy đạp đùi 45° (Leg Press Machine)",
+          "alt": "Horizontal Leg Press Machine",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "1-2",
+          "rest": "2.5p"
         },
         {
-          id: 'ex_push_a_4',
-          order: 4,
-          stt: 4,
-          isKey: true,
-          keyLiftIndex: 2,
-          excelRow: 7,
-          name: 'Machine Lateral Raise',
-          machine: 'Máy dang vai ngang ngồi (Lateral Raise Machine)',
-          alt: 'Cable Lateral Raise (ròng rọc ngang đùi)',
-          sets: 4,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_legs_a_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Leg Extension Machine",
+          "machine": "Máy đá đùi trước ngồi (Leg Extension Machine)",
+          "alt": "Smith Machine Split Squat",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_push_a_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Overhead Cable Triceps Extension',
-          machine: 'Máy kéo cáp đa năng + dây thừng (Cable Tower Rope)',
-          alt: 'Triceps Extension Machine',
-          sets: 3,
-          reps: '10-14',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_legs_a_5",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Hip Adductor Machine",
+          "machine": "Máy khép đùi trong (Seated Hip Adduction)",
+          "alt": "Sumo Squat với tạ đơn",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_push_a_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Cable Triceps Pushdown (V-Bar)',
-          machine: 'Máy kéo cáp cao + thanh chữ V (Cable Pushdown)',
-          alt: 'Assisted Dip Machine (thân thẳng)',
-          sets: 2,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_legs_a_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Standing Calf Raise / Calf Press trên Leg Press",
+          "machine": "Máy nhón bắp chân đứng hoặc nhón ngay trên máy Leg Press",
+          "alt": "Seated Calf Raise Machine",
+          "sets": 4,
+          "reps": "10-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Smith Machine Squat",
+          "machine": "Máy khung Smith",
+          "alt": "Thay Hack Squat khi máy bận",
+          "sets": 3,
+          "reps": "8-10",
+          "rest": "2.5-3p",
+          "tag": "Thay thế"
+        },
+        {
+          "name": "Cable Hip Adduction",
+          "machine": "Máy kéo cáp thấp + đai cổ chân",
+          "alt": "Hip Adductor Machine",
+          "sets": 3,
+          "reps": "12-15",
+          "rest": "60s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'pull_a',
-      name: 'T3 - Pull A',
-      shortName: 'Pull A',
-      shortDay: 'T3',
-      dayOfWeek: 2,
-      dayLabel: 'Thứ Ba',
-      focus: 'Xô rộng + Lưng trên + Vai sau + Tay trước + Bụng A (Cáp)',
-      priorityNote: '',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: false,
-      color: '#06b6d4',
-      exercises: [
+      "id": "push_a",
+      "name": "T3 - Push A",
+      "shortName": "Push A",
+      "shortDay": "T3",
+      "dayOfWeek": 2,
+      "dayLabel": "Thứ Ba",
+      "planModes": [
+        "lpp_6",
+        "ppl_ul_5"
+      ],
+      "focus": "Ngực trên/giữa + Vai ngang + Tay sau (0 Cáp mặc định · Chuẩn máy Ways Station)",
+      "priorityNote": "",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#10b981",
+      "exercises": [
         {
-          id: 'ex_pull_a_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 3,
-          excelRow: 8,
-          name: 'Lat Pulldown Machine (Mid/Neutral Grip)',
-          machine: 'Máy kéo xô trên (Lat Pulldown / Mag-Grip)',
-          alt: 'Assisted Pull-Up Machine',
-          sets: 3,
-          reps: '8-12',
-          rir: '1-2',
-          rest: '2-2.5p'
+          "id": "ex_push_a_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 1,
+          "excelRow": 6,
+          "name": "Incline Chest Press Machine (Lắp bánh tạ)",
+          "machine": "Máy Chest Press lắp bánh tạ đẩy chéo lên (Plate-Loaded)",
+          "alt": "Smith Machine Incline Press 30° / Incline DB Press",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2.5-3p"
         },
         {
-          id: 'ex_pull_a_2',
-          order: 2,
-          stt: 2,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Chest-Supported Row Machine (Wide/45°)',
-          machine: 'Máy kéo lưng có đệm ngực (Chest-Supported Row)',
-          alt: 'Seated Cable Row (tay cầm rộng)',
-          sets: 3,
-          reps: '8-12',
-          rir: '1-2',
-          rest: '2-2.5p'
+          "id": "ex_push_a_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Flat Chest Press Machine (Tạ khối 8001)",
+          "machine": "Máy đẩy ngực ngang cắm chốt (Ways Station 8001)",
+          "alt": "Dumbbell Bench Press / Smith Flat Press",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2-2.5p"
         },
         {
-          id: 'ex_pull_a_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Straight-Arm Cable Lat Pullover',
-          machine: 'Máy kéo cáp cao thẳng tay (Cable Tower)',
-          alt: 'Machine Pullover (Nautilus Pullover)',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_push_a_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Pec Deck Fly Machine",
+          "machine": "Máy ép ngực bướm (Pec Deck / Butterfly)",
+          "alt": "Seated Cable Chest Fly (nếu thích tập cáp)",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_pull_a_4',
-          order: 4,
-          stt: 4,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Reverse Pec Deck Machine',
-          machine: 'Máy ép vai sau (Rear Delt Fly / Reverse Pec Deck)',
-          alt: 'Cable Face Pull',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_push_a_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": true,
+          "keyLiftIndex": 2,
+          "excelRow": 7,
+          "name": "Machine Lateral Raise",
+          "machine": "Máy dang vai ngang ngồi (Lateral Raise Machine)",
+          "alt": "Dumbbell Lateral Raise (tạ đơn) hoặc Cable Lateral Raise",
+          "sets": 4,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_pull_a_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Preacher Curl Machine',
-          machine: 'Máy cuốn tay trước có bệ tỳ (Preacher Curl Machine)',
-          alt: 'EZ-Bar Preacher Curl',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_push_a_5",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Triceps Extension Machine",
+          "machine": "Máy duỗi tay sau ngồi cắm chốt (Triceps Extension)",
+          "alt": "Dumbbell Overhead Triceps Extension / Overhead Cable Rope",
+          "sets": 3,
+          "reps": "10-14",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_pull_a_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Behind-the-Back Cable Curl',
-          machine: 'Máy kéo cáp đơn ròng rọc thấp (Single-Arm Cable)',
-          alt: 'Incline Dumbbell Curl (ghế 45°)',
-          sets: 2,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_push_a_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Seated / Assisted Dip Machine (thân thẳng)",
+          "machine": "Máy Dip trợ lực hoặc Máy nhấn tay sau ngồi",
+          "alt": "Cable Triceps Pushdown (V-Bar)",
+          "sets": 2,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Overhead Cable Triceps Extension",
+          "machine": "Máy kéo cáp đa năng + dây thừng (Cable Tower Rope)",
+          "alt": "Triceps Extension Machine",
+          "sets": 3,
+          "reps": "10-14",
+          "rest": "90s",
+          "tag": "Cáp"
         },
         {
-          id: 'ex_pull_a_7',
-          order: 7,
-          stt: 7,
-          isKey: true,
-          keyLiftIndex: 4,
-          excelRow: 9,
-          name: '[Bụng A] Weighted Cable Crunch',
-          machine: 'Máy kéo cáp cao + dây thừng (Quỳ gập bụng có tạ)',
-          alt: 'Seated Ab Crunch Machine',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "name": "Cable Triceps Pushdown (V-Bar)",
+          "machine": "Máy kéo cáp cao + thanh chữ V",
+          "alt": "Seated / Assisted Dip Machine",
+          "sets": 2,
+          "reps": "10-12",
+          "rest": "90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Seated Cable Chest Fly",
+          "machine": "Máy kéo cáp đôi đa năng (Dual Cable)",
+          "alt": "Pec Deck Fly Machine",
+          "sets": 3,
+          "reps": "12-15",
+          "rest": "90s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'legs_a',
-      name: 'T4 - Legs A',
-      shortName: 'Legs A',
-      shortDay: 'T4',
-      dayOfWeek: 3,
-      dayLabel: 'Thứ Tư',
-      focus: 'Ưu tiên không bỏ buổi Chân vì InBody Chân đang 98.1% / 99.4% (<100%) — Trọng tâm Đùi trước & Bắp chân',
-      priorityNote: 'KHÔNG BỎ BUỔI NÀY — Kéo cơ 2 chân từ 98–99% lên >100%!',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: true,
-      color: '#f59e0b',
-      exercises: [
+      "id": "pull_a",
+      "name": "T4 - Pull A",
+      "shortName": "Pull A",
+      "shortDay": "T4",
+      "dayOfWeek": 3,
+      "dayLabel": "Thứ Tư",
+      "planModes": [
+        "lpp_6",
+        "ppl_ul_5"
+      ],
+      "focus": "Xô rộng + Lưng trên + Vai sau + Tay trước + Bụng A (0 Cáp mặc định · Máy cắm chốt)",
+      "priorityNote": "",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#06b6d4",
+      "exercises": [
         {
-          id: 'ex_legs_a_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 5,
-          excelRow: 10,
-          name: 'Hack Squat Machine',
-          machine: 'Máy Squat trượt nghiêng 45° (Hack / Pendulum Squat)',
-          alt: 'Smith Machine Squat (chân đặt hơi trước)',
-          sets: 3,
-          reps: '8-10',
-          rir: '1-2',
-          rest: '3p'
+          "id": "ex_pull_a_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 3,
+          "excelRow": 8,
+          "name": "Lat Pulldown Machine (4-Stack / Thanh ngang)",
+          "machine": "Máy kéo xô trên (4-Stack Multi Station / Lat Pulldown)",
+          "alt": "Lat Pulldown tay đòn cố định / Assisted Pull-Up",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2-2.5p"
         },
         {
-          id: 'ex_legs_a_2',
-          order: 2,
-          stt: 2,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: '45° Leg Press Machine (chân thấp-giữa)',
-          machine: 'Máy đạp đùi 45° (Leg Press Machine)',
-          alt: 'Horizontal Leg Press Machine',
-          sets: 3,
-          reps: '10-12',
-          rir: '1-2',
-          rest: '2.5p'
+          "id": "ex_pull_a_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Seated Row Machine (Đệm ngực — Tay ngang mở khuỷu 45°)",
+          "machine": "Máy kéo lưng đệm ngực Ways Station (cầm ngang lưng trên)",
+          "alt": "Chest-Supported T-Bar Row",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2-2.5p"
         },
         {
-          id: 'ex_legs_a_3',
-          order: 3,
-          stt: 3,
-          isKey: true,
-          keyLiftIndex: 6,
-          excelRow: 11,
-          name: 'Seated Leg Curl Machine',
-          machine: 'Máy móc đùi sau ngồi (Seated Leg Curl)',
-          alt: 'Lying Leg Curl Machine',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '90s-2p'
+          "id": "ex_pull_a_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Lat Pulldown Machine (Tay đòn cố định ép xô)",
+          "machine": "Máy Lat Pulldown tay đòn cố định (Ways Station)",
+          "alt": "Straight-Arm Cable Lat Pullover (nếu tập cáp)",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_legs_a_4',
-          order: 4,
-          stt: 4,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Leg Extension Machine',
-          machine: 'Máy đá đùi trước ngồi (Leg Extension Machine)',
-          alt: 'Sissy Squat / Smith Split Squat',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_pull_a_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Reverse Pec Deck Machine",
+          "machine": "Máy ép vai sau (máy Pec Deck gạt tay cầm ra sau)",
+          "alt": "Cable Face Pull (nếu tập cáp)",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_legs_a_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Hip Adductor Machine',
-          machine: 'Máy khép đùi trong (Seated Hip Adduction)',
-          alt: 'Cable Hip Adduction',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_pull_a_5",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Iso-Lateral Seated Biceps Curl (8031)",
+          "machine": "Máy cuốn tay trước ngồi độc lập (Ways Station 8031)",
+          "alt": "Preacher Curl Machine / EZ-Bar Curl",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_legs_a_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Standing Calf Raise Machine',
-          machine: 'Máy nhón bắp chân đứng (Standing Calf Raise)',
-          alt: 'Calf Press trên máy Leg Press (chân thẳng)',
-          sets: 4,
-          reps: '10-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_pull_a_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Incline Dumbbell Curl (ghế 45°)",
+          "machine": "Ghế dốc 45° + Tạ đơn (giãn đầu dài tay trước)",
+          "alt": "Behind-the-Back Cable Curl (nếu tập cáp)",
+          "sets": 2,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        },
+        {
+          "id": "ex_pull_a_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": true,
+          "keyLiftIndex": 4,
+          "excelRow": 9,
+          "name": "[Bụng A] Seated Ab Crunch Machine",
+          "machine": "Máy gập bụng ngồi có tạ cắm chốt (Ab Crunch Machine)",
+          "alt": "Weighted Cable Crunch (nếu tập cáp)",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Straight-Arm Cable Lat Pullover",
+          "machine": "Máy kéo cáp cao thẳng tay (Cable Tower)",
+          "alt": "Lat Pulldown tay đòn cố định",
+          "sets": 3,
+          "reps": "12-15",
+          "rest": "90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Behind-the-Back Cable Curl",
+          "machine": "Máy kéo cáp đơn ròng rọc thấp",
+          "alt": "Incline Dumbbell Curl",
+          "sets": 2,
+          "reps": "12-15",
+          "rest": "60-90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "[Bụng A] Weighted Cable Crunch",
+          "machine": "Máy kéo cáp cao + dây thừng (Quỳ gập bụng có tạ)",
+          "alt": "Seated Ab Crunch Machine",
+          "sets": 3,
+          "reps": "12-15",
+          "rest": "60-90s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'push_b',
-      name: 'T5 - Push B',
-      shortName: 'Push B',
-      shortDay: 'T5',
-      dayOfWeek: 4,
-      dayLabel: 'Thứ Năm',
-      focus: 'Vai trước/ngang + Ngực trên Smith + Tay sau + Bụng B (Treo/Xà kép)',
-      priorityNote: '',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: false,
-      color: '#10b981',
-      exercises: [
+      "id": "legs_b",
+      "name": "T5 - Legs B",
+      "shortName": "Legs B",
+      "shortDay": "T5",
+      "dayOfWeek": 4,
+      "dayLabel": "Thứ Năm",
+      "planModes": [
+        "lpp_6"
+      ],
+      "focus": "Ưu tiên Chân (cách Legs A 72h) — Đùi sau, Đùi trước, Mông (Leg Press chân CAO), Bắp chân & Bụng C cuối buổi",
+      "priorityNote": "KHÔNG BỎ BUỔI NÀY — Bụng C luôn để cuối buổi sau Hack Squat & Leg Press!",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": true,
+      "color": "#f59e0b",
+      "exercises": [
         {
-          id: 'ex_push_b_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 7,
-          excelRow: 12,
-          name: 'Seated Shoulder Press Machine',
-          machine: 'Máy đẩy vai ngồi (Converging Shoulder Press)',
-          alt: 'Seated Dumbbell Shoulder Press / Smith OHP',
-          sets: 3,
-          reps: '8-10',
-          rir: '1-2',
-          rest: '2.5p'
+          "id": "ex_legs_b_3",
+          "order": 1,
+          "stt": 1,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Lying Leg Curl Machine",
+          "machine": "Máy móc đùi sau nằm sấp (làm ấm khớp gối đầu buổi)",
+          "alt": "Seated Leg Curl Machine",
+          "sets": 4,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_push_b_2',
-          order: 2,
-          stt: 2,
-          isKey: true,
-          keyLiftIndex: 8,
-          excelRow: 13,
-          name: 'Smith Machine Incline Press (30°)',
-          machine: 'Máy khung Smith + ghế chỉnh 30° (Incline Press)',
-          alt: 'Plate-Loaded Incline Chest Press Machine',
-          sets: 3,
-          reps: '8-12',
-          rir: '1-2',
-          rest: '2.5p'
+          "id": "ex_legs_b_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Hack Squat Machine",
+          "machine": "Máy Squat trượt nghiêng 45° (xuống sâu ăn Đùi & Mông)",
+          "alt": "Smith Machine RDL / Glute Drive Machine",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2.5-3p"
         },
         {
-          id: 'ex_push_b_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Seated Cable Chest Fly (Low-to-High/Mid)',
-          machine: 'Máy kéo cáp đôi đa năng (Dual Cable Crossover)',
-          alt: 'Pec Deck Fly Machine',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_legs_b_1",
+          "order": 3,
+          "stt": 3,
+          "isKey": true,
+          "keyLiftIndex": 11,
+          "excelRow": 16,
+          "name": "Leg Press Machine (Đặt chân CAO ăn Mông/Đùi sau)",
+          "machine": "Máy đạp đùi 45° (đặt bàn chân sát mép trên bàn đạp)",
+          "alt": "Smith Machine RDL / Hip Thrust Machine",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "1-2",
+          "rest": "2.5p"
         },
         {
-          id: 'ex_push_b_4',
-          order: 4,
-          stt: 4,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Single-Arm Cable Lateral Raise',
-          machine: 'Máy kéo cáp đơn ngang cổ tay (Cable Tower)',
-          alt: 'Machine Lateral Raise',
-          sets: 4,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_legs_b_6",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Calf Press trên Leg Press / Seated Calf Raise",
+          "machine": "Nhón mũi chân ngay trên máy Leg Press (hoặc máy bắp chân ngồi)",
+          "alt": "Standing Calf Raise Machine",
+          "sets": 4,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60s"
         },
         {
-          id: 'ex_push_b_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Cable Triceps Pushdown (Straight Bar)',
-          machine: 'Máy kéo cáp cao + thanh thẳng (Cable Tower)',
-          alt: 'Seated Dip Machine',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_legs_b_4",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Leg Extension Machine",
+          "machine": "Máy đá đùi trước ngồi (cô lập sau 2 bài nặng)",
+          "alt": "Smith Machine Bulgarian Split Squat",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_push_b_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Triceps Extension Machine',
-          machine: 'Máy duỗi tay sau ngồi (Triceps Extension Machine)',
-          alt: 'Single-Arm Overhead Cable Extension',
-          sets: 2,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_legs_b_5",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Hip Abductor Machine",
+          "machine": "Máy mở đùi ngoài (Seated Hip Abduction)",
+          "alt": "Cable Glute Kickback",
+          "sets": 2,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_push_b_7',
-          order: 7,
-          stt: 7,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: "[Bụng B] Captain's Chair / Hanging Leg Raise",
-          machine: "Khung tập bụng xà kép tựa lưng (Captain's Chair)",
-          alt: 'Xà đơn treo người cuộn gối/chân',
-          sets: 3,
-          reps: '10-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_legs_b_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": true,
+          "keyLiftIndex": 12,
+          "excelRow": 17,
+          "name": "[Bụng C] Seated Ab Crunch Machine",
+          "machine": "Máy gập bụng ngồi có tạ (luôn tập cuối buổi!)",
+          "alt": "Weighted Cable Crunch",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Smith Machine Romanian Deadlift (RDL)",
+          "machine": "Máy khung Smith kéo đùi sau (Smith RDL)",
+          "alt": "Dumbbell RDL / 45° Back Extension ôm tạ",
+          "sets": 3,
+          "reps": "8-10",
+          "rest": "2.5-3p",
+          "tag": "Nâng cao"
+        },
+        {
+          "name": "Hip Thrust / Glute Drive Machine",
+          "machine": "Máy đẩy hông mông (Glute Drive / Hip Thrust)",
+          "alt": "Leg Press đặt chân cao",
+          "sets": 3,
+          "reps": "10-12",
+          "rest": "2-2.5p",
+          "tag": "Mông"
+        },
+        {
+          "name": "Cable Glute Kickback",
+          "machine": "Máy kéo cáp thấp + đai cổ chân",
+          "alt": "Hip Abductor Machine",
+          "sets": 2,
+          "reps": "12-15",
+          "rest": "60s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'pull_b',
-      name: 'T6 - Pull B',
-      shortName: 'Pull B',
-      shortDay: 'T6',
-      dayOfWeek: 5,
-      dayLabel: 'Thứ Sáu',
-      focus: 'Lưng dày + Xô trợ lực + Vai sau + Cẳng tay + Liên sườn',
-      priorityNote: '',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: false,
-      color: '#06b6d4',
-      exercises: [
+      "id": "push_b",
+      "name": "T6 - Push B",
+      "shortName": "Push B",
+      "shortDay": "T6",
+      "dayOfWeek": 5,
+      "dayLabel": "Thứ Sáu",
+      "planModes": [
+        "lpp_6"
+      ],
+      "focus": "Ưu tiên Vai + Ngực trên Smith + Ép ngực + Vai ngang + Tay sau + Bụng B cuối buổi (0 Cáp)",
+      "priorityNote": "",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#10b981",
+      "exercises": [
         {
-          id: 'ex_pull_b_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 9,
-          excelRow: 14,
-          name: 'Seated Cable Row (Neutral Narrow)',
-          machine: 'Máy kéo cáp ngồi tay hẹp ép hông (Seated Cable Row)',
-          alt: 'Plate-Loaded ISO-Lateral Low Row',
-          sets: 3,
-          reps: '8-12',
-          rir: '1-2',
-          rest: '2.5p'
+          "id": "ex_push_b_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 7,
+          "excelRow": 12,
+          "name": "Seated Shoulder Press Machine",
+          "machine": "Máy đẩy vai ngồi (Converging Shoulder Press)",
+          "alt": "Seated Dumbbell Shoulder Press / Smith OHP",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2.5p"
         },
         {
-          id: 'ex_pull_b_2',
-          order: 2,
-          stt: 2,
-          isKey: true,
-          keyLiftIndex: 10,
-          excelRow: 15,
-          name: 'Assisted Pull-Up Machine',
-          machine: 'Máy kéo xà trợ lực (Assisted Pull-Up/Dip)',
-          alt: 'Lat Pulldown tay cầm trung tính hẹp',
-          sets: 3,
-          reps: '8-10',
-          rir: '1-2',
-          rest: '2.5p'
+          "id": "ex_push_b_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": true,
+          "keyLiftIndex": 8,
+          "excelRow": 13,
+          "name": "Smith Machine Incline Press (30°)",
+          "machine": "Máy khung Smith + ghế chỉnh 30° (Incline Press)",
+          "alt": "Plate-Loaded Incline Chest Press Machine",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2.5p"
         },
         {
-          id: 'ex_pull_b_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Chest-Supported T-Bar / High Row Machine',
-          machine: 'Máy kéo lưng trên đệm ngực (T-Bar / High Row)',
-          alt: 'Seated Row Machine (tay ngang ngực trên)',
-          sets: 3,
-          reps: '10-12',
-          rir: '1-2',
-          rest: '2p'
+          "id": "ex_push_b_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Flat Chest Press Machine (Tạ khối 8001)",
+          "machine": "Máy đẩy ngực ngang cắm chốt Ways Station 8001",
+          "alt": "Có thể bỏ qua nếu muốn rút ngắn buổi còn 60 phút",
+          "sets": 2,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2p"
         },
         {
-          id: 'ex_pull_b_4',
-          order: 4,
-          stt: 4,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Cable Face Pull (Rope)',
-          machine: 'Máy kéo cáp ngang mặt + dây thừng (Cable Tower)',
-          alt: 'Reverse Pec Deck Machine',
-          sets: 3,
-          reps: '15-20',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_push_b_5",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Pec Deck Fly Machine",
+          "machine": "Máy ép ngực bướm (Pec Deck / Butterfly)",
+          "alt": "Seated Cable Chest Fly (nếu tập cáp)",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_pull_b_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Cable Hammer Curl (Rope)',
-          machine: 'Máy kéo cáp thấp + dây thừng (Cẳng tay & Bắp tay)',
-          alt: 'Dumbbell Hammer Curl',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_push_b_4",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Machine Lateral Raise / Dumbbell Lateral Raise",
+          "machine": "Máy dang vai ngang ngồi hoặc Tạ đơn dang vai",
+          "alt": "Single-Arm Cable Lateral Raise (nếu tập cáp)",
+          "sets": 4,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_pull_b_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Seated Biceps Curl Machine',
-          machine: 'Máy cuốn tay trước ngồi (Biceps Curl Machine)',
-          alt: 'Cable Curl thanh thẳng',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_push_b_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Triceps Extension Machine / Assisted Dip",
+          "machine": "Máy duỗi tay sau ngồi hoặc Máy Dip trợ lực (thân thẳng)",
+          "alt": "Cable Triceps Pushdown (nếu tập cáp)",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_pull_b_7',
-          order: 7,
-          stt: 7,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: '[Liên sườn] Cable Woodchopper / Torso Rotation',
-          machine: 'Máy xoay eo (Torso Rotation) hoặc Máy kéo cáp chéo',
-          alt: 'Pallof Press trên máy cáp',
-          sets: 2,
-          reps: '12-15/bên',
-          rir: '1',
-          rest: '60s'
+          "id": "ex_push_b_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "[Bụng B] Captain's Chair / Hanging Leg Raise",
+          "machine": "Khung tập bụng xà kép tựa lưng (luôn để cuối buổi!)",
+          "alt": "Xà đơn treo người cuộn xương chậu",
+          "sets": 3,
+          "reps": "10-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Single-Arm Cable Lateral Raise",
+          "machine": "Máy kéo cáp đơn ngang cổ tay (Cable Tower)",
+          "alt": "Machine / Dumbbell Lateral Raise",
+          "sets": 4,
+          "reps": "12-15",
+          "rest": "60-90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Cable Triceps Pushdown (Straight Bar)",
+          "machine": "Máy kéo cáp cao + thanh thẳng",
+          "alt": "Triceps Extension Machine",
+          "sets": 3,
+          "reps": "10-12",
+          "rest": "90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Seated Cable Chest Fly (Low-to-High)",
+          "machine": "Máy kéo cáp đôi đa năng",
+          "alt": "Pec Deck Fly Machine",
+          "sets": 3,
+          "reps": "12-15",
+          "rest": "90s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'legs_b',
-      name: 'T7 - Legs B',
-      shortName: 'Legs B',
-      shortDay: 'T7',
-      dayOfWeek: 6,
-      dayLabel: 'Thứ Bảy',
-      focus: 'Ưu tiên không bỏ buổi Chân vì InBody Chân đang 98.1% / 99.4% (<100%) — Trọng tâm Đùi sau, Mông & Bụng C',
-      priorityNote: 'KHÔNG BỎ BUỔI NÀY — Hoàn tất 2 buổi Chân & siết múi bụng!',
-      isRestDay: false,
-      isBuiltIn: true,
-      priorityLegs: true,
-      color: '#f59e0b',
-      exercises: [
+      "id": "pull_b",
+      "name": "T7 - Pull B",
+      "shortName": "Pull B",
+      "shortDay": "T7",
+      "dayOfWeek": 6,
+      "dayLabel": "Thứ Bảy",
+      "planModes": [
+        "lpp_6"
+      ],
+      "focus": "Lưng dày + Xô máy cố định + Vai sau + Tay trước & Cẳng tay + Liên sườn (0 Cáp · Chuẩn Ways Station)",
+      "priorityNote": "",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#06b6d4",
+      "exercises": [
         {
-          id: 'ex_legs_b_1',
-          order: 1,
-          stt: 1,
-          isKey: true,
-          keyLiftIndex: 11,
-          excelRow: 16,
-          name: 'Smith Machine Romanian Deadlift (RDL)',
-          machine: 'Máy khung Smith kéo đùi sau (Smith RDL)',
-          alt: '45° Back Extension ôm tạ / Dumbbell RDL',
-          sets: 3,
-          reps: '8-10',
-          rir: '1-2',
-          rest: '2.5-3p'
+          "id": "ex_pull_b_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 9,
+          "excelRow": 14,
+          "name": "Seated Row Machine (Đệm ngực — Tay dọc ép hông)",
+          "machine": "Máy kéo lưng đệm ngực Ways Station (cầm tay dọc ăn Xô)",
+          "alt": "Seated Cable Row (nếu tập cáp)",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2-2.5p"
         },
         {
-          id: 'ex_legs_b_2',
-          order: 2,
-          stt: 2,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Hip Thrust / Glute Drive Machine',
-          machine: 'Máy đẩy hông mông (Glute Drive / Hip Thrust)',
-          alt: 'Smith Machine Hip Thrust / Leg Press chân cao',
-          sets: 3,
-          reps: '10-12',
-          rir: '1-2',
-          rest: '2-2.5p'
+          "id": "ex_pull_b_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": true,
+          "keyLiftIndex": 10,
+          "excelRow": 15,
+          "name": "Lat Pulldown Machine (Tay đòn cố định)",
+          "machine": "Máy Lat Pulldown tay đòn cố định Ways Station",
+          "alt": "Assisted Pull-Up Machine / 4-Stack Pulldown",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2-2.5p"
         },
         {
-          id: 'ex_legs_b_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Lying Leg Curl Machine',
-          machine: 'Máy móc đùi sau nằm sấp (Lying Leg Curl)',
-          alt: 'Seated Leg Curl Machine',
-          sets: 3,
-          reps: '10-12',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_pull_b_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Chest-Supported High Row / Seated Row tay ngang",
+          "machine": "Máy kéo lưng trên đệm ngực (hoặc Seated Row cầm tay ngang mở khuỷu 45°)",
+          "alt": "T-Bar Row có đệm ngực",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "1-2",
+          "rest": "2p"
         },
         {
-          id: 'ex_legs_b_4',
-          order: 4,
-          stt: 4,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Leg Extension Machine',
-          machine: 'Máy đá đùi trước ngồi (Leg Extension Machine)',
-          alt: 'Smith Machine Bulgarian Split Squat',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '90s'
+          "id": "ex_pull_b_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Reverse Pec Deck Machine",
+          "machine": "Máy ép vai sau (máy Pec Deck gạt tay ra sau)",
+          "alt": "Cable Face Pull (nếu tập cáp)",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_legs_b_5',
-          order: 5,
-          stt: 5,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Hip Abductor Machine',
-          machine: 'Máy mở đùi ngoài (Seated Hip Abduction)',
-          alt: 'Cable Glute Kickback',
-          sets: 2,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_pull_b_6",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Iso-Lateral Seated Biceps Curl (8031)",
+          "machine": "Máy cuốn tay trước ngồi độc lập (Ways Station 8031)",
+          "alt": "Preacher Curl / Dumbbell Curl",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_legs_b_6',
-          order: 6,
-          stt: 6,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Seated Calf Raise Machine',
-          machine: 'Máy nhón bắp chân ngồi (Seated Calf Raise)',
-          alt: 'Standing Calf Raise Machine',
-          sets: 4,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_pull_b_5",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Dumbbell Hammer Curl",
+          "machine": "Tạ đơn đứng cuốn dọc kiểu cầm búa (Cẳng tay & Bắp tay ngoài)",
+          "alt": "Cable Hammer Curl dây thừng (nếu tập cáp)",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "60-90s"
         },
         {
-          id: 'ex_legs_b_7',
-          order: 7,
-          stt: 7,
-          isKey: true,
-          keyLiftIndex: 12,
-          excelRow: 17,
-          name: '[Bụng C] Seated Ab Crunch Machine',
-          machine: 'Máy gập bụng ngồi có tạ (Ab Crunch Machine)',
-          alt: 'Weighted Cable Crunch',
-          sets: 3,
-          reps: '12-15',
-          rir: '0-1',
-          rest: '60-90s'
+          "id": "ex_pull_b_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "[Liên sườn] Torso Rotation Machine",
+          "machine": "Máy xoay eo Ways Station (nhẹ vừa 25–30 kg, 1 buổi/tuần)",
+          "alt": "Cable Woodchopper / Pallof Press",
+          "sets": 2,
+          "reps": "12-15/bên",
+          "rir": "1",
+          "rest": "60s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Cable Face Pull (Rope)",
+          "machine": "Máy kéo cáp ngang trán + dây thừng",
+          "alt": "Reverse Pec Deck Machine",
+          "sets": 3,
+          "reps": "15-20",
+          "rest": "60-90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Cable Hammer Curl (Rope)",
+          "machine": "Máy kéo cáp thấp + dây thừng",
+          "alt": "Dumbbell Hammer Curl",
+          "sets": 3,
+          "reps": "10-12",
+          "rest": "60-90s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "Cable Woodchopper",
+          "machine": "Máy kéo cáp chéo thân",
+          "alt": "Torso Rotation Machine",
+          "sets": 2,
+          "reps": "12-15/bên",
+          "rest": "60s",
+          "tag": "Cáp"
         }
       ]
     },
     {
-      id: 'rest_sunday',
-      name: 'CN - Nghỉ & Phục Hồi',
-      shortName: 'Nghỉ CN',
-      shortDay: 'CN',
-      dayOfWeek: 0,
-      dayLabel: 'Chủ Nhật',
-      focus: 'Nghỉ tập tạ hoàn toàn · Đi bộ 8.000+ bước · Giãn cơ nhẹ 10p · Cắt nửa chén cơm tối · Review tuần 3 phút',
-      priorityNote: 'Phục hồi hệ thần kinh & hoàn thành Review sáng Chủ Nhật',
-      isRestDay: true,
-      isBuiltIn: true,
-      priorityLegs: false,
-      color: '#64748b',
-      exercises: [
+      "id": "rest_midweek",
+      "name": "T5 - Nghỉ Giữa Tuần (PPL/UL 5b)",
+      "shortName": "Nghỉ T5",
+      "shortDay": "T5",
+      "dayOfWeek": 4,
+      "dayLabel": "Thứ Năm",
+      "planModes": [
+        "ppl_ul_5"
+      ],
+      "focus": "Nghỉ tạ giữa tuần cho chế độ 5 buổi PPL/UL · Đi bộ 8.000+ bước · Phục hồi khớp trước 2 buổi Lower & Upper",
+      "priorityNote": "Chế độ 5 buổi/tuần: nghỉ T5 giúp T6 Lower & T7 Upper đẩy tạ sung sức hơn!",
+      "isRestDay": true,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#64748b",
+      "exercises": [
         {
-          id: 'ex_rest_sun_1',
-          order: 1,
-          stt: 1,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Đi bộ thư giãn 8.000+ bước',
-          machine: 'Ngoài trời / Máy đi bộ nhẹ',
-          alt: 'Đạp xe nhẹ thư giãn 30 phút',
-          sets: 0,
-          reps: '30-45p',
-          rir: '',
-          rest: '-'
+          "id": "ex_rest_mid_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Đi bộ nhẹ 8.000+ bước (NEAT đốt mỡ bụng)",
+          "machine": "Ngoài trời / Máy chạy bộ đi bộ phẳng",
+          "alt": "Đạp xe nhẹ 25 phút",
+          "sets": 0,
+          "reps": "30-40p",
+          "rir": "",
+          "rest": "-"
         },
         {
-          id: 'ex_rest_sun_2',
-          order: 2,
-          stt: 2,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Giãn cơ nhẹ toàn thân 10 phút',
-          machine: 'Thảm tập / Foam Roller',
-          alt: 'Giãn khớp vai, hông & gân kheo',
-          sets: 0,
-          reps: '10p',
-          rir: '',
-          rest: '-'
+          "id": "ex_rest_mid_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Giãn cơ vai, lưng & đùi 10 phút · Giữ đủ 4 phần đạm",
+          "machine": "Thảm tập / Ăn gọn không calo lỏng",
+          "alt": "Ngủ sớm trước 23h30",
+          "sets": 0,
+          "reps": "10p",
+          "rir": "",
+          "rest": "-"
+        }
+      ],
+      "suggestions": []
+    },
+    {
+      "id": "ul_lower",
+      "name": "T6 - Lower (PPL/UL 5b)",
+      "shortName": "Lower 5b",
+      "shortDay": "T6",
+      "dayOfWeek": 5,
+      "dayLabel": "Thứ Sáu",
+      "planModes": [
+        "ppl_ul_5"
+      ],
+      "focus": "Chế độ 5 buổi PPL/UL — Chân toàn diện (Đùi sau, Đùi trước, Mông, Bắp chân) & Bụng cuối buổi (0 Cáp)",
+      "priorityNote": "Ưu tiên kéo 2 chân từ 98–99% lên >100% · Bụng luôn để cuối buổi!",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": true,
+      "color": "#f59e0b",
+      "exercises": [
+        {
+          "id": "ex_ul_lower_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Lying Leg Curl Machine",
+          "machine": "Máy móc đùi sau nằm sấp (làm ấm gối đầu buổi)",
+          "alt": "Seated Leg Curl Machine",
+          "sets": 4,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "90s"
         },
         {
-          id: 'ex_rest_sun_3',
-          order: 3,
-          stt: 3,
-          isKey: false,
-          keyLiftIndex: null,
-          excelRow: null,
-          name: 'Review sáng Chủ Nhật (3 phút: Cân nặng, Vòng eo & Log tạ ★)',
-          machine: 'Tab Nhóm tập -> Review & Log Tạ ★',
-          alt: 'Cắt bớt nửa chén cơm bữa tối ngày nghỉ',
-          sets: 0,
-          reps: '3p',
-          rir: '',
-          rest: '-'
+          "id": "ex_ul_lower_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": true,
+          "keyLiftIndex": 5,
+          "excelRow": 10,
+          "name": "Hack Squat Machine",
+          "machine": "Máy Squat trượt nghiêng 45° (Đùi trước + Mông)",
+          "alt": "Smith Machine Squat",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2.5-3p"
+        },
+        {
+          "id": "ex_ul_lower_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": true,
+          "keyLiftIndex": 11,
+          "excelRow": 16,
+          "name": "Leg Press Machine (Đặt chân CAO ăn Mông/Đùi sau)",
+          "machine": "Máy đạp đùi 45° (đặt chân sát mép trên bàn đạp)",
+          "alt": "Smith Machine RDL / Hip Thrust Machine",
+          "sets": 3,
+          "reps": "10-12",
+          "rir": "1-2",
+          "rest": "2.5p"
+        },
+        {
+          "id": "ex_ul_lower_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Calf Press trên Leg Press / Seated Calf Raise",
+          "machine": "Nhón mũi chân ngay trên Leg Press hoặc máy Bắp chân ngồi",
+          "alt": "Standing Calf Raise Machine",
+          "sets": 4,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60s"
+        },
+        {
+          "id": "ex_ul_lower_5",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Leg Extension Machine",
+          "machine": "Máy đá đùi trước ngồi",
+          "alt": "Smith Machine Split Squat",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "90s"
+        },
+        {
+          "id": "ex_ul_lower_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Hip Abductor Machine",
+          "machine": "Máy mở đùi ngoài (Seated Hip Abduction)",
+          "alt": "Cable Glute Kickback",
+          "sets": 2,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        },
+        {
+          "id": "ex_ul_lower_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": true,
+          "keyLiftIndex": 12,
+          "excelRow": 17,
+          "name": "[Bụng] Seated Ab Crunch Machine",
+          "machine": "Máy gập bụng ngồi có tạ (cuối buổi)",
+          "alt": "Weighted Cable Crunch",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60-90s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Smith Machine Romanian Deadlift (RDL)",
+          "machine": "Máy khung Smith kéo đùi sau",
+          "alt": "45° Back Extension ôm tạ",
+          "sets": 3,
+          "reps": "8-10",
+          "rest": "2.5-3p",
+          "tag": "Nâng cao"
+        },
+        {
+          "name": "Hip Thrust / Glute Drive Machine",
+          "machine": "Máy đẩy hông mông",
+          "alt": "Leg Press chân cao",
+          "sets": 3,
+          "reps": "10-12",
+          "rest": "2-2.5p",
+          "tag": "Mông"
         }
       ]
+    },
+    {
+      "id": "ul_upper",
+      "name": "T7 - Upper (PPL/UL 5b)",
+      "shortName": "Upper 5b",
+      "shortDay": "T7",
+      "dayOfWeek": 6,
+      "dayLabel": "Thứ Bảy",
+      "planModes": [
+        "ppl_ul_5"
+      ],
+      "focus": "Chế độ 5 buổi PPL/UL — Thân trên toàn diện: Ngực trên + Lưng dày + Vai + Xô + Tay trước/sau + Bụng (0 Cáp)",
+      "priorityNote": "",
+      "isRestDay": false,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#8b5cf6",
+      "exercises": [
+        {
+          "id": "ex_ul_upper_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": true,
+          "keyLiftIndex": 8,
+          "excelRow": 13,
+          "name": "Smith Machine Incline Press (30°)",
+          "machine": "Máy khung Smith + ghế chỉnh 30° (Ngực trên)",
+          "alt": "Incline Chest Press Machine",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2.5p"
+        },
+        {
+          "id": "ex_ul_upper_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": true,
+          "keyLiftIndex": 9,
+          "excelRow": 14,
+          "name": "Seated Row Machine (Đệm ngực — Tay ngang mở khuỷu 45°)",
+          "machine": "Máy kéo lưng đệm ngực Ways Station (Lưng dày & Lưng trên)",
+          "alt": "Chest-Supported T-Bar Row",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2-2.5p"
+        },
+        {
+          "id": "ex_ul_upper_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": true,
+          "keyLiftIndex": 7,
+          "excelRow": 12,
+          "name": "Seated Shoulder Press Machine",
+          "machine": "Máy đẩy vai ngồi (Converging Shoulder Press)",
+          "alt": "Seated Dumbbell Shoulder Press",
+          "sets": 3,
+          "reps": "8-10",
+          "rir": "1-2",
+          "rest": "2p"
+        },
+        {
+          "id": "ex_ul_upper_4",
+          "order": 4,
+          "stt": 4,
+          "isKey": true,
+          "keyLiftIndex": 10,
+          "excelRow": 15,
+          "name": "Lat Pulldown Machine (Tay đòn cố định)",
+          "machine": "Máy kéo xô tay đòn cố định Ways Station",
+          "alt": "4-Stack Lat Pulldown / Assisted Pull-Up",
+          "sets": 3,
+          "reps": "8-12",
+          "rir": "1-2",
+          "rest": "2p"
+        },
+        {
+          "id": "ex_ul_upper_5",
+          "order": 5,
+          "stt": 5,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Machine Lateral Raise / Dumbbell Lateral Raise",
+          "machine": "Máy dang vai ngang ngồi hoặc Tạ đơn",
+          "alt": "Single-Arm Cable Lateral Raise",
+          "sets": 3,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60s"
+        },
+        {
+          "id": "ex_ul_upper_6",
+          "order": 6,
+          "stt": 6,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Reverse Pec Deck Machine",
+          "machine": "Máy ép vai sau (Pec Deck gạt tay ra sau)",
+          "alt": "Cable Face Pull",
+          "sets": 2,
+          "reps": "12-15",
+          "rir": "0-1",
+          "rest": "60s"
+        },
+        {
+          "id": "ex_ul_upper_7",
+          "order": 7,
+          "stt": 7,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Iso-Lateral Seated Biceps Curl (8031)",
+          "machine": "Máy cuốn tay trước ngồi độc lập Ways Station 8031",
+          "alt": "Dumbbell Hammer Curl",
+          "sets": 2,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "60s"
+        },
+        {
+          "id": "ex_ul_upper_8",
+          "order": 8,
+          "stt": 8,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Triceps Extension Machine / Assisted Dip",
+          "machine": "Máy duỗi tay sau ngồi hoặc Dip trợ lực",
+          "alt": "Cable Triceps Pushdown",
+          "sets": 2,
+          "reps": "10-12",
+          "rir": "0-1",
+          "rest": "60s"
+        },
+        {
+          "id": "ex_ul_upper_9",
+          "order": 9,
+          "stt": 9,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "[Bụng] Captain's Chair / Hanging Leg Raise",
+          "machine": "Khung xà kép tựa lưng cuộn xương chậu (cuối buổi)",
+          "alt": "Torso Rotation Machine (nhẹ 25–30 kg)",
+          "sets": 2,
+          "reps": "10-15",
+          "rir": "0-1",
+          "rest": "60s"
+        }
+      ],
+      "suggestions": [
+        {
+          "name": "Pec Deck Fly Machine",
+          "machine": "Máy ép ngực bướm (Pec Deck)",
+          "alt": "Seated Cable Chest Fly",
+          "sets": 2,
+          "reps": "12-15",
+          "rest": "60-90s",
+          "tag": "Ngực thêm"
+        },
+        {
+          "name": "Dumbbell Hammer Curl",
+          "machine": "Tạ đơn đứng cuốn dọc (Cẳng tay)",
+          "alt": "Cable Hammer Curl",
+          "sets": 2,
+          "reps": "10-12",
+          "rest": "60s",
+          "tag": "Cẳng tay"
+        },
+        {
+          "name": "Cable Face Pull (Rope)",
+          "machine": "Máy kéo cáp ngang trán + dây thừng",
+          "alt": "Reverse Pec Deck Machine",
+          "sets": 2,
+          "reps": "15-20",
+          "rest": "60s",
+          "tag": "Cáp"
+        },
+        {
+          "name": "[Liên sườn] Torso Rotation Machine",
+          "machine": "Máy xoay eo Ways Station (nhẹ 25–30 kg)",
+          "alt": "Cable Woodchopper",
+          "sets": 2,
+          "reps": "12-15/bên",
+          "rest": "60s",
+          "tag": "Liên sườn"
+        }
+      ]
+    },
+    {
+      "id": "rest_sunday",
+      "name": "CN - Nghỉ & Phục Hồi",
+      "shortName": "Nghỉ CN",
+      "shortDay": "CN",
+      "dayOfWeek": 0,
+      "dayLabel": "Chủ Nhật",
+      "planModes": [
+        "lpp_6",
+        "ppl_ul_5"
+      ],
+      "focus": "Nghỉ tập tạ hoàn toàn · Đi bộ 8.000+ bước · Giãn cơ nhẹ 10p · Cắt nửa chén cơm tối · Review tuần 3 phút",
+      "priorityNote": "Phục hồi hệ thần kinh & hoàn thành Review sáng Chủ Nhật",
+      "isRestDay": true,
+      "isBuiltIn": true,
+      "priorityLegs": false,
+      "color": "#64748b",
+      "exercises": [
+        {
+          "id": "ex_rest_sun_1",
+          "order": 1,
+          "stt": 1,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Đi bộ thư giãn 8.000+ bước",
+          "machine": "Ngoài trời / Máy đi bộ nhẹ",
+          "alt": "Đạp xe nhẹ thư giãn 30 phút",
+          "sets": 0,
+          "reps": "30-45p",
+          "rir": "",
+          "rest": "-"
+        },
+        {
+          "id": "ex_rest_sun_2",
+          "order": 2,
+          "stt": 2,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Giãn cơ nhẹ toàn thân 10 phút",
+          "machine": "Thảm tập / Foam Roller",
+          "alt": "Giãn khớp vai, hông & gân kheo",
+          "sets": 0,
+          "reps": "10p",
+          "rir": "",
+          "rest": "-"
+        },
+        {
+          "id": "ex_rest_sun_3",
+          "order": 3,
+          "stt": 3,
+          "isKey": false,
+          "keyLiftIndex": null,
+          "excelRow": null,
+          "name": "Review sáng Chủ Nhật (3 phút: Cân nặng, Vòng eo & Log tạ ★)",
+          "machine": "Tab Review Tuần & Đồng bộ Excel/Sheets",
+          "alt": "Cắt bớt nửa chén cơm bữa tối ngày nghỉ",
+          "sets": 0,
+          "reps": "3p",
+          "rir": "",
+          "rest": "-"
+        }
+      ],
+      "suggestions": []
     }
   ];
 
-  // Verbatim 12 ★ key lifts from Sheet 3_Log_Ta_12_Bai_Chinh (rows 6..17)
+  const DEFAULT_GROUP_BY_ID = new Map(DEFAULT_WORKOUT_GROUPS.map((g) => [g.id, g]));
+
+  // Canonical v2 — 12 ★ key lifts aligned with Sheet 3_Log_Ta_12_Bai_Chinh (rows 6..17)
   const KEY_LIFTS_12 = [
     {
-      keyLiftIndex: 1,
-      excelRow: 6,
-      exerciseId: 'ex_push_a_1',
-      altExerciseId: 'push_a_1',
-      groupId: 'push_a',
-      session: 'T2 - Push A',
-      name: 'Incline Chest Press Machine',
-      machine: 'Máy đẩy ngực trên ngồi',
-      target: '3 x 8-10'
+      "keyLiftIndex": 1,
+      "excelRow": 6,
+      "exerciseId": "ex_push_a_1",
+      "altExerciseId": "push_a_1",
+      "groupId": "push_a",
+      "session": "T3 - Push A",
+      "name": "Incline Chest Press Machine (Lắp bánh tạ)",
+      "machine": "Máy Chest Press lắp bánh tạ",
+      "target": "3 x 8-10"
     },
     {
-      keyLiftIndex: 2,
-      excelRow: 7,
-      exerciseId: 'ex_push_a_4',
-      altExerciseId: 'push_a_4',
-      groupId: 'push_a',
-      session: 'T2 - Push A',
-      name: 'Machine Lateral Raise',
-      machine: 'Máy dang vai ngang ngồi',
-      target: '4 x 12-15'
+      "keyLiftIndex": 2,
+      "excelRow": 7,
+      "exerciseId": "ex_push_a_4",
+      "altExerciseId": "push_a_4",
+      "groupId": "push_a",
+      "session": "T3 - Push A",
+      "name": "Machine Lateral Raise",
+      "machine": "Máy dang vai ngang ngồi",
+      "target": "4 x 12-15"
     },
     {
-      keyLiftIndex: 3,
-      excelRow: 8,
-      exerciseId: 'ex_pull_a_1',
-      altExerciseId: 'pull_a_1',
-      groupId: 'pull_a',
-      session: 'T3 - Pull A',
-      name: 'Lat Pulldown Machine (Mid/Neutral Grip)',
-      machine: 'Máy kéo xô trên',
-      target: '3 x 8-12'
+      "keyLiftIndex": 3,
+      "excelRow": 8,
+      "exerciseId": "ex_pull_a_1",
+      "altExerciseId": "pull_a_1",
+      "groupId": "pull_a",
+      "session": "T4 - Pull A",
+      "name": "Lat Pulldown Machine (4-Stack / Thanh ngang)",
+      "machine": "Máy kéo xô trên 4-Stack",
+      "target": "3 x 8-12"
     },
     {
-      keyLiftIndex: 4,
-      excelRow: 9,
-      exerciseId: 'ex_pull_a_7',
-      altExerciseId: 'pull_a_7',
-      groupId: 'pull_a',
-      session: 'T3 - Pull A',
-      name: 'Weighted Cable Crunch (Abs A)',
-      machine: 'Máy cáp cao + dây thừng (Bụng)',
-      target: '3 x 12-15'
+      "keyLiftIndex": 4,
+      "excelRow": 9,
+      "exerciseId": "ex_pull_a_7",
+      "altExerciseId": "pull_a_7",
+      "groupId": "pull_a",
+      "session": "T4 - Pull A",
+      "name": "[Bụng A] Seated Ab Crunch Machine",
+      "machine": "Máy gập bụng ngồi có tạ",
+      "target": "3 x 12-15"
     },
     {
-      keyLiftIndex: 5,
-      excelRow: 10,
-      exerciseId: 'ex_legs_a_1',
-      altExerciseId: 'legs_a_1',
-      groupId: 'legs_a',
-      session: 'T4 - Legs A',
-      name: 'Hack Squat Machine',
-      machine: 'Máy Squat trượt nghiêng 45°',
-      target: '3 x 8-10'
+      "keyLiftIndex": 5,
+      "excelRow": 10,
+      "exerciseId": "ex_legs_a_1",
+      "altExerciseId": "legs_a_1",
+      "groupId": "legs_a",
+      "session": "T2 - Legs A",
+      "name": "Hack Squat Machine",
+      "machine": "Máy Squat trượt nghiêng 45°",
+      "target": "3 x 8-10"
     },
     {
-      keyLiftIndex: 6,
-      excelRow: 11,
-      exerciseId: 'ex_legs_a_3',
-      altExerciseId: 'legs_a_3',
-      groupId: 'legs_a',
-      session: 'T4 - Legs A',
-      name: 'Seated Leg Curl Machine',
-      machine: 'Máy móc đùi sau ngồi',
-      target: '3 x 10-12'
+      "keyLiftIndex": 6,
+      "excelRow": 11,
+      "exerciseId": "ex_legs_a_3",
+      "altExerciseId": "legs_a_3",
+      "groupId": "legs_a",
+      "session": "T2 - Legs A",
+      "name": "Seated Leg Curl Machine",
+      "machine": "Máy móc đùi sau ngồi",
+      "target": "3 x 10-12"
     },
     {
-      keyLiftIndex: 7,
-      excelRow: 12,
-      exerciseId: 'ex_push_b_1',
-      altExerciseId: 'push_b_1',
-      groupId: 'push_b',
-      session: 'T5 - Push B',
-      name: 'Seated Shoulder Press Machine',
-      machine: 'Máy đẩy vai ngồi',
-      target: '3 x 8-10'
+      "keyLiftIndex": 7,
+      "excelRow": 12,
+      "exerciseId": "ex_push_b_1",
+      "altExerciseId": "push_b_1",
+      "groupId": "push_b",
+      "session": "T6 - Push B",
+      "name": "Seated Shoulder Press Machine",
+      "machine": "Máy đẩy vai ngồi",
+      "target": "3 x 8-10"
     },
     {
-      keyLiftIndex: 8,
-      excelRow: 13,
-      exerciseId: 'ex_push_b_2',
-      altExerciseId: 'push_b_2',
-      groupId: 'push_b',
-      session: 'T5 - Push B',
-      name: 'Smith Machine Incline Press (30°)',
-      machine: 'Máy khung Smith ghế 30°',
-      target: '3 x 8-12'
+      "keyLiftIndex": 8,
+      "excelRow": 13,
+      "exerciseId": "ex_push_b_2",
+      "altExerciseId": "push_b_2",
+      "groupId": "push_b",
+      "session": "T6 - Push B",
+      "name": "Smith Machine Incline Press (30°)",
+      "machine": "Máy khung Smith ghế 30°",
+      "target": "3 x 8-12"
     },
     {
-      keyLiftIndex: 9,
-      excelRow: 14,
-      exerciseId: 'ex_pull_b_1',
-      altExerciseId: 'pull_b_1',
-      groupId: 'pull_b',
-      session: 'T6 - Pull B',
-      name: 'Seated Cable Row (Neutral Narrow)',
-      machine: 'Máy kéo cáp ngồi tay hẹp',
-      target: '3 x 8-12'
+      "keyLiftIndex": 9,
+      "excelRow": 14,
+      "exerciseId": "ex_pull_b_1",
+      "altExerciseId": "pull_b_1",
+      "groupId": "pull_b",
+      "session": "T7 - Pull B",
+      "name": "Seated Row Machine (Tay dọc ép hông)",
+      "machine": "Máy kéo lưng đệm ngực Ways Station",
+      "target": "3 x 8-12"
     },
     {
-      keyLiftIndex: 10,
-      excelRow: 15,
-      exerciseId: 'ex_pull_b_2',
-      altExerciseId: 'pull_b_2',
-      groupId: 'pull_b',
-      session: 'T6 - Pull B',
-      name: 'Assisted Pull-Up Machine',
-      machine: 'Máy kéo xà trợ lực',
-      target: '3 x 8-10'
+      "keyLiftIndex": 10,
+      "excelRow": 15,
+      "exerciseId": "ex_pull_b_2",
+      "altExerciseId": "pull_b_2",
+      "groupId": "pull_b",
+      "session": "T7 - Pull B",
+      "name": "Lat Pulldown Machine (Tay đòn cố định)",
+      "machine": "Máy Lat Pulldown cố định Ways Station",
+      "target": "3 x 8-10"
     },
     {
-      keyLiftIndex: 11,
-      excelRow: 16,
-      exerciseId: 'ex_legs_b_1',
-      altExerciseId: 'legs_b_1',
-      groupId: 'legs_b',
-      session: 'T7 - Legs B',
-      name: 'Smith Machine Romanian Deadlift (RDL)',
-      machine: 'Máy khung Smith kéo đùi sau',
-      target: '3 x 8-10'
+      "keyLiftIndex": 11,
+      "excelRow": 16,
+      "exerciseId": "ex_legs_b_1",
+      "altExerciseId": "legs_b_1",
+      "groupId": "legs_b",
+      "session": "T5 - Legs B",
+      "name": "Leg Press Machine (Đặt chân CAO ăn Mông/Đùi sau)",
+      "machine": "Máy đạp đùi 45° (chân cao)",
+      "target": "3 x 10-12"
     },
     {
-      keyLiftIndex: 12,
-      excelRow: 17,
-      exerciseId: 'ex_legs_b_7',
-      altExerciseId: 'legs_b_7',
-      groupId: 'legs_b',
-      session: 'T7 - Legs B',
-      name: 'Seated Ab Crunch Machine (Abs C)',
-      machine: 'Máy gập bụng ngồi có tạ',
-      target: '3 x 12-15'
+      "keyLiftIndex": 12,
+      "excelRow": 17,
+      "exerciseId": "ex_legs_b_7",
+      "altExerciseId": "legs_b_7",
+      "groupId": "legs_b",
+      "session": "T5 - Legs B",
+      "name": "[Bụng C] Seated Ab Crunch Machine",
+      "machine": "Máy gập bụng ngồi có tạ",
+      "target": "3 x 12-15"
     }
   ];
 
@@ -1080,11 +1695,13 @@
   }
 
   // Canonicalize exercise IDs seamlessly between 'ex_push_a_1' (frontend) and 'push_a_1' (backend)
+  const CANONICAL_EX_PREFIX_RE = /^(push_a|pull_a|legs_a|push_b|pull_b|legs_b|rest_sun|rest_mid|ul_lower|ul_upper)_\d+$/;
+
   function canonicalizeExerciseId(exId) {
     if (!exId || typeof exId !== 'string') return '';
     const trimmed = exId.trim();
     if (!trimmed) return '';
-    if (/^(push_a|pull_a|legs_a|push_b|pull_b|legs_b|rest_sun)_\d+$/.test(trimmed)) {
+    if (CANONICAL_EX_PREFIX_RE.test(trimmed)) {
       return 'ex_' + trimmed;
     }
     return trimmed;
@@ -1097,10 +1714,45 @@
     const list = [trimmed];
     if (trimmed.startsWith('ex_')) {
       list.push(trimmed.slice(3));
-    } else if (/^(push_a|pull_a|legs_a|push_b|pull_b|legs_b|rest_sun)_\d+$/.test(trimmed)) {
+    } else if (CANONICAL_EX_PREFIX_RE.test(trimmed)) {
       list.push('ex_' + trimmed);
     }
     return list;
+  }
+
+  // Cross-mode key-lift equivalence so weight history & 12 ★ review stay seamless across 6-day LPP & 5-day PPL/UL
+  const KEY_LIFT_INDEX_TO_EXERCISE_ID = new Map(
+    KEY_LIFTS_12.map((kl) => [kl.keyLiftIndex, kl.exerciseId])
+  );
+  const KEY_LIFT_EQUIVALENT_GROUPS = (() => {
+    const byIdx = new Map();
+    const add = (idx, id) => {
+      if (!idx || !id) return;
+      if (!byIdx.has(idx)) byIdx.set(idx, new Set());
+      byIdx.get(idx).add(canonicalizeExerciseId(id));
+    };
+    KEY_LIFTS_12.forEach((kl) => add(kl.keyLiftIndex, kl.exerciseId));
+    DEFAULT_WORKOUT_GROUPS.forEach((g) => {
+      (g.exercises || []).forEach((ex) => {
+        if (ex.keyLiftIndex) add(ex.keyLiftIndex, ex.id);
+      });
+    });
+    const map = new Map();
+    byIdx.forEach((idSet) => {
+      const allAliases = new Set();
+      idSet.forEach((cid) => getExerciseIdAliases(cid).forEach((a) => allAliases.add(a)));
+      const arr = Array.from(allAliases);
+      arr.forEach((a) => map.set(a, arr));
+    });
+    return map;
+  })();
+
+  function getWeightLookupAliases(exId) {
+    const base = getExerciseIdAliases(exId);
+    const canon = canonicalizeExerciseId(exId);
+    const equiv = KEY_LIFT_EQUIVALENT_GROUPS.get(canon) || KEY_LIFT_EQUIVALENT_GROUPS.get(exId);
+    if (!equiv) return base;
+    return Array.from(new Set([...base, ...equiv]));
   }
 
   function normalizeExerciseSetChecks(task) {
@@ -1156,12 +1808,39 @@
     };
   }
 
+  function cloneSuggestion(sug) {
+    if (!sug || typeof sug !== 'object') return null;
+    const name = String(sug.name || '').trim();
+    if (!name) return null;
+    return {
+      name,
+      machine: String(sug.machine || '').trim(),
+      alt: String(sug.alt || sug.altMachine || '').trim(),
+      sets: Number.isFinite(Number(sug.sets)) ? Math.max(0, Number(sug.sets)) : 3,
+      reps: String(sug.reps || '10-12').trim(),
+      rest: String(sug.rest || '90s').trim(),
+      tag: String(sug.tag || '').trim()
+    };
+  }
+
   function cloneWorkoutGroup(group, fallbackIndex) {
+    const id = String(group?.id || `custom_group_${(fallbackIndex || 0) + 1}`);
+    const defaultMatch = DEFAULT_GROUP_BY_ID.get(id) || null;
     const exercises = Array.isArray(group?.exercises)
       ? group.exercises.map((ex, idx) => cloneExercise(ex, idx + 1)).filter((ex) => ex.name)
       : [];
+    const planModes = Array.isArray(group?.planModes) && group.planModes.length > 0
+      ? Array.from(new Set(group.planModes.map(String).filter((m) => Boolean(PLAN_MODES[m]))))
+      : (defaultMatch && Array.isArray(defaultMatch.planModes)
+          ? defaultMatch.planModes.slice()
+          : Object.keys(PLAN_MODES));
+    const rawSuggestions = Array.isArray(group?.suggestions)
+      ? group.suggestions
+      : (defaultMatch && Array.isArray(defaultMatch.suggestions) ? defaultMatch.suggestions : []);
+    const suggestions = rawSuggestions.map(cloneSuggestion).filter(Boolean);
+
     return {
-      id: String(group?.id || `custom_group_${(fallbackIndex || 0) + 1}`),
+      id,
       name: String(group?.name || 'Nhóm tập mới').trim(),
       shortName: String(group?.shortName || group?.shortDay || group?.name || 'Nhóm tập').trim(),
       shortDay: String(group?.shortDay || '').trim(),
@@ -1170,6 +1849,7 @@
           ? null
           : Number(group.dayOfWeek),
       dayLabel: String(group?.dayLabel || '').trim(),
+      planModes: planModes.length > 0 ? planModes : Object.keys(PLAN_MODES),
       focus: String(group?.focus || group?.subtitle || '').trim(),
       priorityNote: String(group?.priorityNote || '').trim(),
       isRestDay: Boolean(group?.isRestDay || group?.isRest),
@@ -1177,7 +1857,8 @@
       priorityLegs: Boolean(group?.priorityLegs),
       color: String(group?.color || '#10b981'),
       updatedAt: Number(group?.updatedAt) || 0,
-      exercises
+      exercises,
+      suggestions
     };
   }
 
@@ -1186,7 +1867,8 @@
   // ==========================================
   function getDefaultGymData() {
     return {
-      version: 1,
+      version: 2,
+      activePlanMode: DEFAULT_PLAN_MODE,
       planStartSunday: PLAN_START_SUNDAY,
       baseline: { ...DEFAULT_BASELINE },
       dailyHabitsTemplate: DAILY_HABITS_TEMPLATE.map((h) => ({ ...h })),
@@ -1204,6 +1886,11 @@
     if (!raw || typeof raw !== 'object') {
       return defaults;
     }
+
+    const rawVersion = Number(raw.version) || 1;
+    const activePlanMode = (typeof raw.activePlanMode === 'string' && PLAN_MODES[raw.activePlanMode])
+      ? raw.activePlanMode
+      : DEFAULT_PLAN_MODE;
 
     const deletedGroupIds = Array.isArray(raw.deletedGroupIds)
       ? Array.from(new Set(raw.deletedGroupIds.map(String).filter(Boolean)))
@@ -1226,14 +1913,26 @@
       updatedAt: Number(rawBaseline.updatedAt) || 0
     };
 
-    // Workout groups
+    // Workout groups (auto-upgrade unmodified v1 built-ins cleanly while preserving user edits & custom groups)
     let workoutGroups = defaults.workoutGroups;
     if (Array.isArray(raw.workoutGroups) && raw.workoutGroups.length > 0) {
       const seenIds = new Set();
       const cleaned = [];
+      let anyEditedBuiltIn = false;
       raw.workoutGroups.forEach((g, idx) => {
         if (!g || typeof g !== 'object') return;
-        const cloned = cloneWorkoutGroup(g, idx);
+        const gid = String(g.id || '');
+        const isUntouchedV1BuiltIn =
+          rawVersion < 2 &&
+          Boolean(g.isBuiltIn || g.isDefault) &&
+          !(Number(g.updatedAt) > 0) &&
+          !Array.isArray(g.planModes) &&
+          DEFAULT_GROUP_BY_ID.has(gid);
+        if (Boolean(g.isBuiltIn || g.isDefault) && Number(g.updatedAt) > 0) {
+          anyEditedBuiltIn = true;
+        }
+        const sourceGroup = isUntouchedV1BuiltIn ? DEFAULT_GROUP_BY_ID.get(gid) : g;
+        const cloned = cloneWorkoutGroup(sourceGroup, idx);
         if (!cloned.id || seenIds.has(cloned.id)) return;
         seenIds.add(cloned.id);
         cleaned.push(cloned);
@@ -1245,6 +1944,15 @@
         }
       });
       if (cleaned.length > 0) {
+        if (rawVersion < 2 && !anyEditedBuiltIn) {
+          // Order upgraded v1 built-in groups in canonical v2 LPP/PPL-UL order, keeping custom groups at the end
+          const orderRank = new Map(DEFAULT_WORKOUT_GROUPS.map((dg, i) => [dg.id, i]));
+          cleaned.sort((a, b) => {
+            const ra = orderRank.has(a.id) ? orderRank.get(a.id) : 999;
+            const rb = orderRank.has(b.id) ? orderRank.get(b.id) : 999;
+            return ra - rb;
+          });
+        }
         workoutGroups = cleaned;
       }
     }
@@ -1370,7 +2078,8 @@
         : PLAN_START_SUNDAY;
 
     return {
-      version: Number(raw.version) || 1,
+      version: Math.max(2, rawVersion),
+      activePlanMode,
       planStartSunday,
       baseline,
       dailyHabitsTemplate,
@@ -1498,8 +2207,23 @@
       }
     });
 
+    let mergedActivePlanMode = local.activePlanMode || DEFAULT_PLAN_MODE;
+    if (remoteTopTs > localTopTs) {
+      mergedActivePlanMode = PLAN_MODES[remote.activePlanMode] ? remote.activePlanMode : mergedActivePlanMode;
+    } else if (
+      remoteTopTs === localTopTs &&
+      remoteTopTs === 0 &&
+      mergedActivePlanMode === DEFAULT_PLAN_MODE &&
+      remote.activePlanMode &&
+      PLAN_MODES[remote.activePlanMode] &&
+      remote.activePlanMode !== DEFAULT_PLAN_MODE
+    ) {
+      mergedActivePlanMode = remote.activePlanMode;
+    }
+
     return normalizeGymData({
-      version: Math.max(local.version, remote.version),
+      version: Math.max(2, local.version, remote.version),
+      activePlanMode: mergedActivePlanMode,
       planStartSunday: remoteTopTs > localTopTs ? remote.planStartSunday : local.planStartSunday,
       baseline: mergedBaseline,
       dailyHabitsTemplate: local.dailyHabitsTemplate,
@@ -1515,26 +2239,23 @@
   // ==========================================
   // SCHEDULE & WEEK DATE MAPPING
   // ==========================================
-  const DAY_OF_WEEK_GROUP_MAP = {
-    1: 'push_a',
-    2: 'pull_a',
-    3: 'legs_a',
-    4: 'push_b',
-    5: 'pull_b',
-    6: 'legs_b',
-    0: 'rest_sunday'
-  };
+  const DAY_OF_WEEK_GROUP_MAP = PLAN_MODES[DEFAULT_PLAN_MODE].dayMap;
 
-  function getSuggestedGroupForDate(dateStr, workoutGroups) {
+  function getSuggestedGroupForDate(dateStr, workoutGroups, activePlanMode = DEFAULT_PLAN_MODE) {
     const groups = Array.isArray(workoutGroups) && workoutGroups.length > 0
       ? workoutGroups
       : DEFAULT_WORKOUT_GROUPS;
+    const modeKey = (typeof activePlanMode === 'string' && PLAN_MODES[activePlanMode])
+      ? activePlanMode
+      : DEFAULT_PLAN_MODE;
+    const dayMap = PLAN_MODES[modeKey].dayMap || DAY_OF_WEEK_GROUP_MAP;
     const d = parseIsoDate(dateStr) || new Date();
     const dow = d.getDay();
-    const preferredId = DAY_OF_WEEK_GROUP_MAP[dow];
+    const preferredId = dayMap[dow] ?? dayMap[String(dow)];
 
     return (
       groups.find((g) => g.id === preferredId) ||
+      groups.find((g) => g.dayOfWeek === dow && (!Array.isArray(g.planModes) || g.planModes.includes(modeKey))) ||
       groups.find((g) => g.dayOfWeek === dow) ||
       DEFAULT_WORKOUT_GROUPS.find((g) => g.id === preferredId) ||
       groups[0]
@@ -1569,7 +2290,7 @@
     if (!exerciseId) return null;
     const normalized = normalizeGymData(gymData);
     const cutoff = beforeDateStr ? String(beforeDateStr).slice(0, 10) : '';
-    const aliases = new Set(getExerciseIdAliases(exerciseId));
+    const aliases = new Set(getWeightLookupAliases(exerciseId));
 
     let best = null;
 
@@ -1727,7 +2448,11 @@
       : null;
     const workoutGroupName =
       firstExercise?.gymGroupName || dailyLog?.workoutGroupName || dailyLog?.groupName || matchedGroup?.name || '';
-    const isRestGroup = Boolean(matchedGroup?.isRestDay || workoutGroupId === 'rest_sunday');
+    const isRestGroup = Boolean(
+      matchedGroup?.isRestDay ||
+      workoutGroupId === 'rest_sunday' ||
+      workoutGroupId === 'rest_midweek'
+    );
 
     const dObj = parseIsoDate(targetDate);
     const isSunday = dObj ? dObj.getDay() === 0 : false;
@@ -1741,7 +2466,7 @@
         (setsTarget > 0 && setsDone >= Math.max(1, Math.ceil(setsTarget * 0.5)))
       );
 
-    const workoutDone = isSunday
+    const workoutDone = (isSunday || isRestGroup)
       ? completedWorkoutExercises
       : Boolean(completedWorkoutExercises || habitsMap.habit_workout);
 
@@ -1804,7 +2529,7 @@
   // ==========================================
   // WEEKLY ADVICE FORMULA (MATCHES EXCEL SHEET 1)
   // ==========================================
-  function computeWeeklyAdvice({ weekNum, hasActivity, sessionsCount, cleanEatingDays, waistDelta, strengthTrend }) {
+  function computeWeeklyAdvice({ weekNum, hasActivity, sessionsCount, cleanEatingDays, waistDelta, strengthTrend, targetSessionsPerWeek = 6 }) {
     if (!hasActivity) {
       return {
         text: 'Chưa có dữ liệu tuần này — Tick đủ hiệp từng bài tập mỗi buổi & check-in 30 giây sáng Chủ Nhật.',
@@ -1823,12 +2548,14 @@
         tone: 'rose'
       };
     }
+    const targetSessions = Number(targetSessionsPerWeek) === 5 ? 5 : 6;
+    const minRecommendedSessions = targetSessions === 5 ? 4 : 5;
     if (
       (sessionsCount !== null && sessionsCount < 4) ||
       (cleanEatingDays !== null && cleanEatingDays < 5)
     ) {
       return {
-        text: 'Ưu tiên giữ đều >=5 buổi/tuần & 5/7 ngày ăn chuẩn trước',
+        text: `Ưu tiên giữ đều >=${minRecommendedSessions} buổi/tuần & 5/7 ngày ăn chuẩn trước`,
         tone: 'amber'
       };
     }
@@ -1849,7 +2576,9 @@
   // ==========================================
   function computeWeeklyAnalytics(gymData, tasks) {
     const normalized = normalizeGymData(gymData);
-    const { baseline, planStartSunday, weeklyCheckins, dailyLogs, workoutGroups } = normalized;
+    const { baseline, planStartSunday, weeklyCheckins, dailyLogs, workoutGroups, activePlanMode } = normalized;
+    const planModeKey = PLAN_MODES[activePlanMode] ? activePlanMode : DEFAULT_PLAN_MODE;
+    const targetSessionsPerWeek = PLAN_MODES[planModeKey].sessionsPerWeek || 6;
     const safeTasks = Array.isArray(tasks) ? tasks : [];
 
     const exerciseMetaMap = new Map();
@@ -1901,7 +2630,15 @@
       const recordAutoWeight = (exId, val) => {
         const w = parsePositiveWeight(val);
         if (w === null || !exId) return;
-        getExerciseIdAliases(exId).forEach((aid) => {
+        const targetAliases = new Set(getWeightLookupAliases(exId));
+        const meta = exerciseMetaMap.get(exId) || exerciseMetaMap.get(canonicalizeExerciseId(exId));
+        if (meta && meta.keyLiftIndex) {
+          const canonicalKeyId = KEY_LIFT_INDEX_TO_EXERCISE_ID.get(Number(meta.keyLiftIndex));
+          if (canonicalKeyId) {
+            getExerciseIdAliases(canonicalKeyId).forEach((aid) => targetAliases.add(aid));
+          }
+        }
+        targetAliases.forEach((aid) => {
           if (weekAutoWeights[aid] === undefined || w > weekAutoWeights[aid]) {
             weekAutoWeights[aid] = w;
           }
@@ -1932,10 +2669,10 @@
         }
       });
 
-      const cappedAutoSessions = Math.min(6, autoSessionsCount);
+      const cappedAutoSessions = Math.min(targetSessionsPerWeek, autoSessionsCount);
       const sessionsCount =
         checkin.sessionsOverride !== null && checkin.sessionsOverride !== undefined
-          ? Math.min(6, Math.max(0, Number(checkin.sessionsOverride)))
+          ? Math.min(targetSessionsPerWeek, Math.max(0, Number(checkin.sessionsOverride)))
           : cappedAutoSessions;
       const cleanEatingDays =
         checkin.cleanEatingOverride !== null && checkin.cleanEatingOverride !== undefined
@@ -1985,7 +2722,7 @@
           strengthTrend ||
           note.trim() ||
           loggedKeyLiftsCount > 0 ||
-          checkin.sessionsOverride !== null
+          (checkin.sessionsOverride !== null && checkin.sessionsOverride !== undefined)
       );
       const hasActivity = Boolean(weekHasDailyActivity || hasCheckinInput);
 
@@ -1995,7 +2732,8 @@
         sessionsCount: hasActivity ? sessionsCount : null,
         cleanEatingDays: hasActivity ? cleanEatingDays : null,
         waistDelta,
-        strengthTrend
+        strengthTrend,
+        targetSessionsPerWeek
       });
 
       weeks.push({
@@ -2006,6 +2744,7 @@
         mondayDate,
         sundayDate,
         dates,
+        targetSessions: targetSessionsPerWeek,
         sessionsCount,
         autoSessionsCount: cappedAutoSessions,
         cleanEatingDays,
@@ -2070,7 +2809,7 @@
     const totalSessions = weeks.reduce((acc, w) => acc + (w.hasActivity ? w.sessionsCount : 0), 0);
     const reviewedWeeks = activeWeeks.length;
     const attendancePct =
-      reviewedWeeks > 0 ? Math.round((totalSessions / (reviewedWeeks * 6)) * 100) : 0;
+      reviewedWeeks > 0 ? Math.min(100, Math.round((totalSessions / (reviewedWeeks * targetSessionsPerWeek)) * 100)) : 0;
     const totalGreenDays = weeks.reduce((acc, w) => acc + w.greenDays, 0);
 
     const avgCleanEatingDays =
@@ -2086,6 +2825,8 @@
     const latestWaistWeek = [...weeks].reverse().find((w) => w.waistCm !== null) || null;
 
     const totals = {
+      activePlanMode: planModeKey,
+      targetSessionsPerWeek,
       totalSessions,
       reviewedWeeks,
       attendancePct,
@@ -2189,6 +2930,8 @@
       });
 
     return {
+      activePlanMode: planModeKey,
+      targetSessionsPerWeek,
       baseline,
       planStartSunday,
       weeks,
@@ -2209,7 +2952,8 @@
 
   function buildGymAccountSheets(gymData, tasks) {
     const analytics = computeWeeklyAnalytics(gymData, tasks || []);
-    const { baseline, weeks, totals, keyLiftsSummary } = analytics;
+    const { baseline, weeks, totals, keyLiftsSummary, targetSessionsPerWeek } = analytics;
+    const targetSessions = targetSessionsPerWeek || 6;
     const now = Date.now();
 
     const weeklyReviewRows = [
@@ -2233,7 +2977,7 @@
         id: `gym_wk_${wk.weekNum}`,
         week: wk.code,
         sundayDate: formatVnDateFull(wk.sundayDate),
-        sessions: wk.hasActivity ? `${wk.sessionsCount}/6` : '',
+        sessions: wk.hasActivity ? `${wk.sessionsCount}/${targetSessions}` : '',
         cleanEating: wk.hasActivity ? `${wk.cleanEatingDays}/7` : '',
         stepsSleep: wk.hasActivity ? `${wk.stepsSleepDays}/7` : '',
         greenDays: wk.hasActivity ? String(wk.greenDays) : '',
@@ -2272,7 +3016,7 @@
       columns: [
         { id: 'week', name: 'Tuần', width: 130, type: 'text' },
         { id: 'sundayDate', name: 'Ngày CN', width: 112, type: 'text' },
-        { id: 'sessions', name: 'Buổi tập (/6)', width: 115, type: 'text' },
+        { id: 'sessions', name: `Buổi tập (/${targetSessions})`, width: 115, type: 'text' },
         { id: 'cleanEating', name: 'Ăn chuẩn (/7)', width: 115, type: 'text' },
         { id: 'stepsSleep', name: '8k bước & Ngủ (/7)', width: 138, type: 'text' },
         { id: 'greenDays', name: 'Ngày Xanh', width: 95, type: 'text' },
@@ -2534,11 +3278,14 @@
   const GymPlan = {
     GYM_STORAGE_KEY,
     PLAN_START_SUNDAY,
+    DEFAULT_PLAN_MODE,
+    PLAN_MODES,
     DEFAULT_BASELINE,
     DAILY_HABITS_TEMPLATE,
     DEFAULT_WORKOUT_GROUPS,
     KEY_LIFTS_12,
     STRENGTH_TREND_OPTIONS,
+    cloneWorkoutGroup,
     getDefaultGymData,
     normalizeGymData,
     mergeGymData,
